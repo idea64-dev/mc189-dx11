@@ -116,8 +116,8 @@
 
 ### 2.2 Ресурсы и локализация
 - [x] `IResourceManager`, `SimpleReloadableResourceManager`/`FallbackResourceManager`, `SimpleResource` с `.mcmeta`, `DefaultResourcePack` (jar + индекс ассетов)
-- [ ] `I18n` / `Locale`: `.lang`-файлы (в 1.8.9 ещё `key=value`, не JSON), смена языка
-- [ ] `GameSettings`: чтение/запись `options.txt` (формат совместим с оригиналом)
+- [x] `I18n` / `Locale` / `LanguageManager`: `.lang`-файлы (`key=value`), перезапись `%d`/`%f` в `%s` той же регуляркой, `String.format` с поведением Java (сверено с JVM), список языков из `pack.mcmeta`
+- [x] `GameSettings` + `KeyBinding`: все опции, чтение/запись `options.txt` в формате оригинала (кодировка ANSI, как у `FileReader`, `Float.toString` как в Java, JSON списков как у Gson)
 
 ### 2.3 Шрифт
 - [ ] `FontRenderer`: `ascii.png`, вычисление ширины глифов по пикселям, тень, `§`-коды цвета/форматирования (жирный, курсив, зачёркнутый, подчёркнутый, `§k` obfuscated)

@@ -8,6 +8,7 @@
 #include "client/renderer/texture/TextureUtil.h"
 #include "client/renderer/vertex/DefaultVertexFormats.h"
 #include "client/resources/DefaultResourcePack.h"
+#include "client/resources/LanguageManager.h"
 #include "client/resources/ResourceIndex.h"
 #include "client/resources/SimpleReloadableResourceManager.h"
 #include "client/shader/Framebuffer.h"
@@ -93,12 +94,12 @@ void Minecraft::run()
 
 void Minecraft::startGame()
 {
-    // Java: new GameSettings(this, mcDataDir) loads options.txt here (stage 2.2).
+    gameSettings = std::make_unique<GameSettings>(this, mcDataDir);
     // Java: startTimerHackThread() raised the Windows timer resolution; Display::sync uses a high-resolution timer instead.
 
-    if (gameSettings.overrideHeight > 0 && gameSettings.overrideWidth > 0) {
-        displayWidth = gameSettings.overrideWidth;
-        displayHeight = gameSettings.overrideHeight;
+    if (gameSettings->overrideHeight > 0 && gameSettings->overrideWidth > 0) {
+        displayWidth = gameSettings->overrideWidth;
+        displayHeight = gameSettings->overrideHeight;
     }
 
     Log::info("Minecraft {} (C++ / Direct3D 11 port)", launchedVersion);
@@ -109,12 +110,14 @@ void Minecraft::startGame()
     // The window size is DPI-scaled by Display, so take the real client size.
     displayWidth = Display::getWidth();
     displayHeight = Display::getHeight();
-    Display::setVSyncEnabled(gameSettings.enableVsync);
+    Display::setVSyncEnabled(gameSettings->enableVsync);
 
     framebufferMc = std::make_unique<Framebuffer>(displayWidth, displayHeight, true);
     framebufferMc->setFramebufferColor(0.0f, 0.0f, 0.0f, 0.0f);
     defaultResourcePacks.push_back(mcDefaultResourcePack);
     mcResourceManager = std::make_unique<SimpleReloadableResourceManager>();
+    mcLanguageManager = std::make_unique<LanguageManager>(gameSettings->language);
+    mcResourceManager->registerReloadListener(*mcLanguageManager);
     refreshResources();
     renderEngine = std::make_unique<TextureManager>(*mcResourceManager);
     mcResourceManager->registerReloadListener(*renderEngine);
@@ -133,14 +136,35 @@ void Minecraft::startGame()
     DxStateManager::matrixMode(5888);
     DxStateManager::viewport(0, 0, displayWidth, displayHeight);
 
-    if (gameSettings.fullScreen && !fullscreen)
+    if (gameSettings->fullScreen && !fullscreen)
         toggleFullscreen();
 }
 
 void Minecraft::refreshResources()
 {
-    // Java also adds the selected resource packs (stage 3) and reloads languages and renderers.
-    mcResourceManager->reloadResources(defaultResourcePacks);
+    // Java also adds the resource packs selected in the repository (stage 3).
+    std::vector<std::shared_ptr<IResourcePack>> list = defaultResourcePacks;
+    try {
+        mcResourceManager->reloadResources(list);
+    } catch (const std::exception& e) {
+        Log::info("Caught error stitching, removing all assigned resourcepacks ({})", e.what());
+        list = defaultResourcePacks;
+        mcResourceManager->reloadResources(list);
+        gameSettings->resourcePacks.clear();
+        gameSettings->incompatibleResourcePacks.clear();
+        gameSettings->saveOptions();
+    }
+    mcLanguageManager->parseLanguageMetadata(list);
+    // Java: renderGlobal.loadRenderers() (stage 7)
+}
+
+bool Minecraft::isUnicode() const
+{
+    return (mcLanguageManager && mcLanguageManager->isCurrentLocaleUnicode()) || (gameSettings && gameSettings->forceUnicodeFont);
+}
+
+void Minecraft::updateFontUnicodeFlag()
+{
 }
 
 void Minecraft::drawSplashScreen(TextureManager& textureManager)
@@ -272,13 +296,13 @@ void Minecraft::runGameLoop()
 
     while (getSystemTime() >= debugUpdateTime + 1000LL) {
         debugFPS = fpsCounter;
-        const bool unlimited = static_cast<float>(gameSettings.limitFramerate) == GameSettings::FRAMERATE_LIMIT_MAX;
+        const bool unlimited = static_cast<float>(gameSettings->limitFramerate) == GameSettings::Options::FRAMERATE_LIMIT.getValueMax();
         debug = std::format("{} fps ({} chunk update{}) T: {}{}{}{}",
             debugFPS, 0, "s",
-            unlimited ? std::string("inf") : std::to_string(gameSettings.limitFramerate),
-            gameSettings.enableVsync ? " vsync" : "",
-            gameSettings.fancyGraphics ? "" : " fast",
-            gameSettings.clouds == 0 ? "" : (gameSettings.clouds == 1 ? " fast-clouds" : " fancy-clouds"));
+            unlimited ? std::string("inf") : std::to_string(gameSettings->limitFramerate),
+            gameSettings->enableVsync ? " vsync" : "",
+            gameSettings->fancyGraphics ? "" : " fast",
+            gameSettings->clouds == 0 ? "" : (gameSettings->clouds == 1 ? " fast-clouds" : " fancy-clouds"));
         debugUpdateTime += 1000LL;
         fpsCounter = 0;
 
@@ -301,7 +325,10 @@ void Minecraft::runTick()
     debugInputTick();
 
     while (Keyboard::next()) {
-        // KeyBinding::setKeyBindState / onTick arrive with stage 2.2.
+        const int k = Keyboard::getEventKey() == 0 ? Keyboard::getEventCharacter() + 256 : Keyboard::getEventKey();
+        KeyBinding::setKeyBindState(k, Keyboard::getEventKeyState());
+        if (Keyboard::getEventKeyState())
+            KeyBinding::onTick(k);
         dispatchKeypresses();
     }
 }
@@ -347,9 +374,9 @@ void Minecraft::dispatchKeypresses()
 
     if (i != 0 && !Keyboard::isRepeatEvent()) {
         if (Keyboard::getEventKeyState()) {
-            if (i == gameSettings.keyBindFullscreen) {
+            if (i == gameSettings->keyBindFullscreen.getKeyCode()) {
                 toggleFullscreen();
-            } else if (i == gameSettings.keyBindScreenshot) {
+            } else if (i == gameSettings->keyBindScreenshot.getKeyCode()) {
                 // Java prints the result to the chat (stage 8).
                 ScreenShotHelper::saveScreenshot(mcDataDir, displayWidth, displayHeight, *framebufferMc);
             }
@@ -384,12 +411,12 @@ void Minecraft::checkWindowResize()
 
 int Minecraft::getLimitFramerate() const
 {
-    return theWorld == nullptr && currentScreen != nullptr ? 30 : gameSettings.limitFramerate;
+    return theWorld == nullptr && currentScreen != nullptr ? 30 : gameSettings->limitFramerate;
 }
 
 bool Minecraft::isFramerateLimitBelowMax() const
 {
-    return static_cast<float>(getLimitFramerate()) < GameSettings::FRAMERATE_LIMIT_MAX;
+    return static_cast<float>(getLimitFramerate()) < GameSettings::Options::FRAMERATE_LIMIT.getValueMax();
 }
 
 void Minecraft::toggleFullscreen()
@@ -397,7 +424,7 @@ void Minecraft::toggleFullscreen()
     // Java switched LWJGL display modes and restored tempDisplayWidth x tempDisplayHeight on exit.
     // Borderless fullscreen restores the previous window placement instead.
     fullscreen = !fullscreen;
-    gameSettings.fullScreen = fullscreen;
+    gameSettings->fullScreen = fullscreen;
 
     Display::setFullscreen(fullscreen);
     displayWidth = Display::getWidth();
@@ -413,7 +440,7 @@ void Minecraft::toggleFullscreen()
         updateFramebufferSize();
     }
 
-    Display::setVSyncEnabled(gameSettings.enableVsync);
+    Display::setVSyncEnabled(gameSettings->enableVsync);
     Log::info("Fullscreen {} ({}x{})", fullscreen ? "on" : "off", displayWidth, displayHeight);
 }
 

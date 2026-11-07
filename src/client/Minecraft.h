@@ -22,6 +22,7 @@ class DefaultResourcePack;
 class Framebuffer;
 class GuiScreen;
 class IResourcePack;
+class LanguageManager;
 class SimpleReloadableResourceManager;
 class TextureManager;
 class WorldClient;
@@ -52,15 +53,18 @@ public:
     const DefaultResourcePack& getDefaultResourcePack() const { return *mcDefaultResourcePack; }
     TextureManager& getTextureManager() { return *renderEngine; }
     Framebuffer& getFramebuffer() { return *framebufferMc; }
-    // Java: languageManager.isCurrentLocaleUnicode() || forceUnicodeFont. Languages arrive with stage 2.2.
-    bool isUnicode() const { return gameSettings.forceUnicodeFont; }
+    LanguageManager& getLanguageManager() { return *mcLanguageManager; }
+    bool isUnicode() const;
+    bool isFullScreen() const { return fullscreen; }
+    // GameSettings FORCE_UNICODE_FONT: fontRendererObj.setUnicodeFlag(isUnicode()) once the font exists (stage 2.3).
+    void updateFontUnicodeFlag();
     void refreshResources();
     // Draws a textured rectangle from a 256x256 texture with the WorldRenderer.
     void draw(int posX, int posY, int texU, int texV, int width, int height, int red, int green, int blue, int alpha);
 
     int displayWidth;
     int displayHeight;
-    GameSettings gameSettings;
+    std::unique_ptr<GameSettings> gameSettings;
     // Debug line shown on F3, e.g. "120 fps (0 chunk updates) T: 120 vsync".
     std::string debug;
 
@@ -100,6 +104,7 @@ private:
     std::shared_ptr<DefaultResourcePack> mcDefaultResourcePack;
     std::vector<std::shared_ptr<IResourcePack>> defaultResourcePacks;
     std::unique_ptr<SimpleReloadableResourceManager> mcResourceManager;
+    std::unique_ptr<LanguageManager> mcLanguageManager;
     std::unique_ptr<TextureManager> renderEngine;
     std::unique_ptr<Framebuffer> framebufferMc;
     std::optional<ResourceLocation> mojangLogo;

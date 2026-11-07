@@ -11,7 +11,7 @@ ScaledResolution::ScaledResolution(const Minecraft& minecraft)
     , scaleFactor(1)
 {
     const bool unicode = minecraft.isUnicode();
-    int i = minecraft.gameSettings.guiScale;
+    int i = minecraft.gameSettings->guiScale;
     if (i == 0)
         i = 1000;
 

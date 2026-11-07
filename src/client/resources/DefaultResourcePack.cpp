@@ -44,6 +44,21 @@ std::optional<std::vector<uint8_t>> DefaultResourcePack::getResourceStream(const
     return clientJar->read("assets/" + location.getResourceDomain() + "/" + location.getResourcePath());
 }
 
+std::optional<nlohmann::json> DefaultResourcePack::getPackMetadata(const std::string& section) const
+{
+    const auto it = mapAssets.find("pack.mcmeta");
+    if (it == mapAssets.end())
+        return std::nullopt;
+    std::ifstream stream(it->second, std::ios::binary);
+    if (!stream)
+        return std::nullopt;
+    const nlohmann::json root = nlohmann::json::parse(stream);
+    const auto found = root.find(section);
+    if (found == root.end())
+        return std::nullopt;
+    return *found;
+}
+
 bool DefaultResourcePack::resourceExists(const ResourceLocation& location) const
 {
     return clientJar->contains("assets/" + location.getResourceDomain() + "/" + location.getResourcePath())

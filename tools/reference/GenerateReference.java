@@ -4,7 +4,9 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.IllegalFormatException;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 import net.minecraft.util.MathHelper;
 
@@ -94,6 +96,24 @@ public class GenerateReference {
     static final String[] HASH_STRINGS = {
         "", "a", "minecraft", "Notch", "minecraft:textures/gui/title/minecraft.png", "Привет",
         "😀 smile", "The quick brown fox jumps over the lazy dog", "§cRed §lBold"
+    };
+
+    static final float[] TO_STRING_FLOATS = {
+        0.0f, -0.0f, 1.0f, -1.0f, 0.5f, 0.44366196f, 0.5412844f, 0.31690142f, 70.0f, 110.0f, 0.1f, 0.2f, 0.3f,
+        1.0E-3f, 9.99E-4f, 1.0E-5f, 1234567.0f, 1.0E7f, 1.2345678E7f, 3.4028235E38f, 1.4E-45f, 100.0f, 0.075f,
+        Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, 2.5E-4f, 123.456f, -98.765f
+    };
+
+    static final double[] TO_STRING_DOUBLES = {
+        0.0, 1.0, 0.1, 0.3, 1.0 / 3.0, 2.0 / 3.0, 1.0E-3, 9.99E-4, 1.0E7, 1.2345678901234E7, 1.0E-300, 6.02214076E23,
+        Double.MIN_VALUE, Double.MAX_VALUE, -1234.5678, 100.0
+    };
+
+    // Locale's rewrite pattern and String.format with three string arguments, as I18n would run them.
+    static final Pattern LOCALE_PATTERN = Pattern.compile("%(\\d+\\$)?[\\d\\.]*[df]");
+    static final String[] FORMAT_PATTERNS = {
+        "plain text", "%s", "%s and %s", "%2$s then %1$s", "%d items", "%.2f%%", "%3$d/%1$s", "100%", "%", "%s %s %s %s",
+        "%1$s%1$s", "%-5s|", "%5s|", "%n", "%0$s", "%S!", "%5.1f", "%.3d", "%%d", "%1$d%2$f", "%x", "%c", "50%% off %s"
     };
 
     static void mathScript(List<Long> out) {
@@ -270,6 +290,34 @@ public class GenerateReference {
             w.println();
             writeLongs(w, "mathScript", math);
 
+            w.println("struct FloatString { int32_t bits; const char8_t* text; };");
+            w.println("inline constexpr FloatString floatToStrings[] = {");
+            for (float f : TO_STRING_FLOATS) w.println("    { " + Float.floatToRawIntBits(f) + ", " + cppString(Float.toString(f)) + " },");
+            w.println("};");
+            w.println("struct DoubleString { int64_t bits; const char8_t* text; };");
+            w.println("inline constexpr DoubleString doubleToStrings[] = {");
+            for (double d : TO_STRING_DOUBLES) {
+                long bits = Double.doubleToRawLongBits(d);
+                w.println("    { " + (bits == Long.MIN_VALUE ? "INT64_MIN" : bits + "LL") + ", " + cppString(Double.toString(d)) + " },");
+            }
+            w.println("};");
+            w.println("struct FormatCase { const char8_t* pattern; const char8_t* rewritten; bool ok; const char8_t* result; };");
+            w.println("inline constexpr FormatCase formatCases[] = {");
+            for (String p : FORMAT_PATTERNS) {
+                String rewritten = LOCALE_PATTERN.matcher(p).replaceAll("%$1s");
+                String result;
+                boolean ok;
+                try {
+                    result = String.format(rewritten, "A", "B", "C");
+                    ok = true;
+                } catch (IllegalFormatException e) {
+                    result = "";
+                    ok = false;
+                }
+                w.println("    { " + cppString(p) + ", " + cppString(rewritten) + ", " + ok + ", " + cppString(result) + " },");
+            }
+            w.println("};");
+            w.println();
             w.println("struct StringHash { const char8_t* text; int32_t hash; };");
             w.println("inline constexpr StringHash stringHashes[] = {");
             for (String s : HASH_STRINGS) w.println("    { " + cppString(s) + ", " + s.hashCode() + " },");

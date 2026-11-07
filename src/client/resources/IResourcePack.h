@@ -1,11 +1,14 @@
 #pragma once
 
 // Original: net/minecraft/client/resources/IResourcePack.java
-// Pack metadata (pack.mcmeta) and pack images arrive with the resource pack screen (ROADMAP stage 3).
+// Pack images arrive with the resource pack screen (ROADMAP stage 3).
 
 #include "util/ResourceLocation.h"
 
+#include <nlohmann/json.hpp>
+
 #include <cstdint>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -30,6 +33,8 @@ public:
     virtual std::vector<uint8_t> getInputStream(const ResourceLocation& location) const = 0;
     virtual bool resourceExists(const ResourceLocation& location) const = 0;
     virtual std::set<std::string> getResourceDomains() const = 0;
+    // The "<section>" object of the pack's pack.mcmeta, or nullopt. Throws on malformed JSON.
+    virtual std::optional<nlohmann::json> getPackMetadata(const std::string& section) const = 0;
     virtual std::string getPackName() const = 0;
 };
 

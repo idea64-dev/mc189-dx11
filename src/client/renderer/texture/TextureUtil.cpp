@@ -156,7 +156,7 @@ void TextureUtil::uploadTextureMipmap(const std::vector<std::vector<uint32_t>>& 
 std::span<const uint32_t> TextureUtil::applyAnaglyph(std::span<const uint32_t> data, std::vector<uint32_t>& scratch)
 {
     const Minecraft* minecraft = Minecraft::getMinecraft();
-    if (!minecraft || !minecraft->gameSettings.anaglyph)
+    if (!minecraft || !minecraft->gameSettings || !minecraft->gameSettings->anaglyph)
         return data;
     scratch.resize(data.size());
     for (size_t i = 0; i < data.size(); ++i)
