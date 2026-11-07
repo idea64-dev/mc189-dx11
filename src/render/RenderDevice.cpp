@@ -252,6 +252,9 @@ void RenderDevice::clear(float red, float green, float blue, float alpha)
 
 void RenderDevice::present(bool vsync)
 {
+    if (prePresent)
+        prePresent();
+
     // Tearing lets "vsync off" actually exceed the refresh rate in windowed and borderless modes.
     const UINT syncInterval = vsync ? 1 : 0;
     const UINT flags = (!vsync && tearingSupported) ? DXGI_PRESENT_ALLOW_TEARING : 0;

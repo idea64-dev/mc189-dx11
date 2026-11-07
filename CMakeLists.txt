@@ -28,8 +28,35 @@ file(GLOB_RECURSE MC_ENGINE_SOURCES CONFIGURE_DEPENDS
 )
 list(REMOVE_ITEM MC_ENGINE_SOURCES "${CMAKE_SOURCE_DIR}/src/client/main/Main.cpp")
 
-add_library(mc_engine STATIC ${MC_ENGINE_SOURCES})
-target_include_directories(mc_engine PUBLIC "${CMAKE_SOURCE_DIR}/src")
+# --- Shaders: compiled by fxc into headers with the bytecode ---
+
+find_program(FXC_EXECUTABLE fxc REQUIRED HINTS "$ENV{WindowsSdkVerBinPath}x64" "$ENV{WindowsSdkBinPath}x64")
+set(MC_SHADER_SOURCE "${CMAKE_SOURCE_DIR}/shaders/FixedFunction.hlsl")
+set(MC_SHADER_OUTPUT "${CMAKE_BINARY_DIR}/generated/shaders")
+set(MC_SHADER_HEADERS "")
+foreach(shader IN ITEMS
+        "FixedFunctionVS|vs_5_0|VSMain"
+        "FixedFunctionPS|ps_5_0|PSMain"
+        "FixedFunctionPSFlat|ps_5_0|PSMainFlat"
+        "PresentVS|vs_5_0|PresentVS"
+        "PresentPS|ps_5_0|PresentPS")
+    string(REPLACE "|" ";" parts "${shader}")
+    list(GET parts 0 name)
+    list(GET parts 1 profile)
+    list(GET parts 2 entry)
+    add_custom_command(
+        OUTPUT "${MC_SHADER_OUTPUT}/${name}.h"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${MC_SHADER_OUTPUT}"
+        COMMAND "${FXC_EXECUTABLE}" /nologo /O3 /T ${profile} /E ${entry} /Vn g_${name} /Fh "${MC_SHADER_OUTPUT}/${name}.h" "${MC_SHADER_SOURCE}"
+        DEPENDS "${MC_SHADER_SOURCE}"
+        COMMENT "Compiling shader ${name}"
+        VERBATIM)
+    list(APPEND MC_SHADER_HEADERS "${MC_SHADER_OUTPUT}/${name}.h")
+endforeach()
+
+add_library(mc_engine STATIC ${MC_ENGINE_SOURCES} ${MC_SHADER_HEADERS} "${MC_SHADER_SOURCE}")
+set_source_files_properties("${MC_SHADER_SOURCE}" PROPERTIES HEADER_FILE_ONLY TRUE)
+target_include_directories(mc_engine PUBLIC "${CMAKE_SOURCE_DIR}/src" PRIVATE "${MC_SHADER_OUTPUT}")
 target_compile_definitions(mc_engine PUBLIC
     UNICODE _UNICODE
     WIN32_LEAN_AND_MEAN NOMINMAX

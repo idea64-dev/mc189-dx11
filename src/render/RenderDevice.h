@@ -6,6 +6,7 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 namespace mc {
@@ -36,6 +37,9 @@ public:
     // Equivalent of Java GlStateManager.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT).
     void clear(float red, float green, float blue, float alpha);
     void present(bool vsync);
+    // Runs right before every Present (the GL emulation copies the window framebuffer to the back buffer here).
+    void setPrePresentCallback(std::function<void()> callback) { prePresent = std::move(callback); }
+    ID3D11RenderTargetView* getBackBufferView() const { return backBufferView.Get(); }
 
     ID3D11Device* getDevice() const { return device.Get(); }
     ID3D11DeviceContext* getContext() const { return context.Get(); }
@@ -63,6 +67,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> depthBuffer;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthView;
 
+    std::function<void()> prePresent;
     AdapterInfo adapterInfo;
     bool tearingSupported = false;
     UINT swapChainFlags = 0;
