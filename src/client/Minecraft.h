@@ -19,7 +19,9 @@
 namespace mc {
 
 class DefaultResourcePack;
+class FontRenderer;
 class Framebuffer;
+class IResourceManager;
 class GuiScreen;
 class IResourcePack;
 class LanguageManager;
@@ -54,9 +56,10 @@ public:
     TextureManager& getTextureManager() { return *renderEngine; }
     Framebuffer& getFramebuffer() { return *framebufferMc; }
     LanguageManager& getLanguageManager() { return *mcLanguageManager; }
+    const IResourceManager& getResourceManager() const;
     bool isUnicode() const;
     bool isFullScreen() const { return fullscreen; }
-    // GameSettings FORCE_UNICODE_FONT: fontRendererObj.setUnicodeFlag(isUnicode()) once the font exists (stage 2.3).
+    // GameSettings FORCE_UNICODE_FONT: fontRendererObj.setUnicodeFlag(isUnicode()).
     void updateFontUnicodeFlag();
     void refreshResources();
     // Draws a textured rectangle from a 256x256 texture with the WorldRenderer.
@@ -67,6 +70,9 @@ public:
     std::unique_ptr<GameSettings> gameSettings;
     // Debug line shown on F3, e.g. "120 fps (0 chunk updates) T: 120 vsync".
     std::string debug;
+
+    std::unique_ptr<FontRenderer> fontRendererObj;
+    std::unique_ptr<FontRenderer> standardGalacticFontRenderer;
 
     // Not ported yet; kept so the ported logic reads like the original.
     WorldClient* theWorld = nullptr;

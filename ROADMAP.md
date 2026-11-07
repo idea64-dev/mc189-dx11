@@ -120,9 +120,10 @@
 - [x] `GameSettings` + `KeyBinding`: все опции, чтение/запись `options.txt` в формате оригинала (кодировка ANSI, как у `FileReader`, `Float.toString` как в Java, JSON списков как у Gson)
 
 ### 2.3 Шрифт
-- [ ] `FontRenderer`: `ascii.png`, вычисление ширины глифов по пикселям, тень, `§`-коды цвета/форматирования (жирный, курсив, зачёркнутый, подчёркнутый, `§k` obfuscated)
-- [ ] Unicode-страницы `unicode_page_XX.png` + `glyph_sizes.bin` (для русского языка и forceUnicodeFont)
-- [ ] `getStringWidth`, `trimStringToWidth`, `listFormattedStringToWidth`, `drawSplitString`
+- [x] `FontRenderer`: `ascii.png`, ширины глифов по пикселям, тень, `§`-коды цвета/форматирования (жирный, курсив, зачёркнутый, подчёркнутый, `§k`), immediate mode как в оригинале
+- [x] Unicode-страницы `unicode_page_XX.png` + `glyph_sizes.bin` (с особенностью оригинала: байты ширин ≥ 0x80 дают «мусорную» ширину)
+- [x] `getStringWidth`, `trimStringToWidth`, `listFormattedStringToWidth`, `wrapFormattedStringToWidth`, `drawSplitString` (включая перенос `textColor` между строками, как в оригинале)
+- [ ] `bidiReorder` (арабский/иврит через ICU) — вместе с экраном языков
 
 ### 2.4 GUI-фреймворк
 - [ ] `Gui`: `drawRect`, `drawGradientRect`, `drawTexturedModalRect`, `drawCenteredString`, `drawModalRectWithCustomSizedTexture`

@@ -1,5 +1,6 @@
 #include "client/Minecraft.h"
 
+#include "client/gui/FontRenderer.h"
 #include "client/gui/ScaledResolution.h"
 #include "client/renderer/DxStateManager.h"
 #include "client/renderer/Tessellator.h"
@@ -9,6 +10,7 @@
 #include "client/renderer/vertex/DefaultVertexFormats.h"
 #include "client/resources/DefaultResourcePack.h"
 #include "client/resources/LanguageManager.h"
+#include "client/resources/Locale.h"
 #include "client/resources/ResourceIndex.h"
 #include "client/resources/SimpleReloadableResourceManager.h"
 #include "client/shader/Framebuffer.h"
@@ -123,6 +125,16 @@ void Minecraft::startGame()
     mcResourceManager->registerReloadListener(*renderEngine);
     drawSplashScreen(*renderEngine);
 
+    // Java: skinManager, saveLoader, mcSoundHandler, mcMusicTicker come before the fonts (later stages).
+    fontRendererObj = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii.png"), *renderEngine, false);
+    if (!gameSettings->language.empty()) {
+        fontRendererObj->setUnicodeFlag(isUnicode());
+        fontRendererObj->setBidiFlag(mcLanguageManager->isCurrentLanguageBidirectional());
+    }
+    standardGalacticFontRenderer = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii_sga.png"), *renderEngine, false);
+    mcResourceManager->registerReloadListener(*fontRendererObj);
+    mcResourceManager->registerReloadListener(*standardGalacticFontRenderer);
+
     DxStateManager::enableTexture2D();
     DxStateManager::shadeModel(7425);
     DxStateManager::clearDepth(1.0);
@@ -165,6 +177,13 @@ bool Minecraft::isUnicode() const
 
 void Minecraft::updateFontUnicodeFlag()
 {
+    if (fontRendererObj)
+        fontRendererObj->setUnicodeFlag(isUnicode());
+}
+
+const IResourceManager& Minecraft::getResourceManager() const
+{
+    return *mcResourceManager;
 }
 
 void Minecraft::drawSplashScreen(TextureManager& textureManager)
@@ -521,6 +540,17 @@ void Minecraft::renderStage2Preview()
     renderEngine->bindTexture(ResourceLocation("textures/gui/widgets.png"));
     DxStateManager::color(1.0f, 1.0f, 1.0f, 1.0f);
     draw(width / 2 - 100, height - 30, 0, 66, 200, 20, 255, 255, 255, 255);
+
+    // Text: translations, shadows, formatting codes, the unicode pages
+    FontRenderer& font = *fontRendererObj;
+    const std::string label = I18n::format("menu.singleplayer");
+    font.drawStringWithShadow(label, static_cast<float>(width / 2 - font.getStringWidth(label) / 2), static_cast<float>(height - 30 + 6), 14737632);
+    font.drawStringWithShadow("Minecraft 1.8.9", 2.0f, static_cast<float>(height - 10), -1);
+    const std::string copyright = "Copyright Mojang AB. Do not distribute!";
+    font.drawStringWithShadow(copyright, static_cast<float>(width - font.getStringWidth(copyright) - 2), static_cast<float>(height - 10), -1);
+    font.drawStringWithShadow("§cRed §aGreen §lBold§r §oItalic§r §nUnder§r §mStrike§r §kMagic", 2.0f, 46.0f, -1);
+    font.drawString("Привет, мир! Àßç ░█ αβγ", 2, 58, 0xFFFFA0);
+    font.drawSplitString("drawSplitString wraps long lines at word boundaries and carries §bformatting§r across the break.", 2, 72, 150, 0xA0A0A0);
 }
 
 void Minecraft::shutdown()
@@ -532,6 +562,8 @@ void Minecraft::shutdownMinecraftApplet()
 {
     Log::info("Stopping!");
     // GL objects go before the context, like the JVM releasing them before Display.destroy().
+    fontRendererObj.reset();
+    standardGalacticFontRenderer.reset();
     renderEngine.reset();
     framebufferMc.reset();
     mcResourceManager.reset();

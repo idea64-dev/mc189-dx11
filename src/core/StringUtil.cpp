@@ -26,4 +26,15 @@ std::string toUtf8(std::wstring_view wide)
     return result;
 }
 
+std::u16string toUtf16(std::string_view utf8)
+{
+    const std::wstring wide = toWide(utf8);
+    return std::u16string(wide.begin(), wide.end());
+}
+
+std::string fromUtf16(std::u16string_view utf16)
+{
+    return toUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(utf16.data()), utf16.size()));
+}
+
 } // namespace mc
