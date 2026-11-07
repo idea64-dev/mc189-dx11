@@ -4,3 +4,4 @@
 /run/
 *.user
 CMakeUserPresets.json
+/run_vanilla/
