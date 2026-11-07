@@ -40,15 +40,26 @@ public static class W {
 "@
 [W]::SetProcessDPIAware() | Out-Null
 
+# Presses F2 (the game's own screenshot key) and moves the new file to run\<name>.png. Reading the game's
+# framebuffer instead of the screen keeps other windows out of the picture.
 function Shot($hwnd, $name) {
-    $r = New-Object W+RECT; [W]::GetClientRect($hwnd, [ref]$r) | Out-Null
-    $p = New-Object W+POINT; [W]::ClientToScreen($hwnd, [ref]$p) | Out-Null
-    $bmp = New-Object System.Drawing.Bitmap ([Math]::Max(1, $r.R)), ([Math]::Max(1, $r.B))
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.CopyFromScreen($p.X, $p.Y, 0, 0, $bmp.Size)
+    $dir = Join-Path $runDir "screenshots"
+    $before = @(Get-ChildItem $dir -Filter *.png -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    [W]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 100
+    [W]::Key(0x3C)
+    $file = $null
+    for ($i = 0; $i -lt 30 -and -not $file; $i++) {
+        Start-Sleep -Milliseconds 100
+        $file = Get-ChildItem $dir -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.FullName } | Select-Object -First 1
+    }
+    if (-not $file) { return "${name}: no screenshot written" }
+    $target = Join-Path $runDir "$name.png"
+    Move-Item $file.FullName $target -Force
+    $bmp = New-Object System.Drawing.Bitmap $target
     $center = $bmp.GetPixel([int]($bmp.Width / 2), [int]($bmp.Height / 2))
-    $bmp.Save((Join-Path $runDir "$name.png")); $g.Dispose(); $bmp.Dispose()
-    "{0}: client {1}x{2}, centre pixel #{3:X2}{4:X2}{5:X2}" -f $name, $r.R, $r.B, $center.R, $center.G, $center.B
+    $line = "{0}: {1}x{2}, centre pixel #{3:X2}{4:X2}{5:X2}" -f $name, $bmp.Width, $bmp.Height, $center.R, $center.G, $center.B
+    $bmp.Dispose()
+    $line
 }
 function Title($hwnd) { $sb = New-Object System.Text.StringBuilder 256; [W]::GetWindowText($hwnd, $sb, 256) | Out-Null; $sb.ToString() }
 

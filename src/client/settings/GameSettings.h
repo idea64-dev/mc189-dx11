@@ -19,9 +19,14 @@ public:
     bool fullScreen = false;
     int overrideWidth = 0;
     int overrideHeight = 0;
+    int guiScale = 0;
+    bool forceUnicodeFont = false;
+    bool anaglyph = false;
+    bool fboEnable = true;
 
-    // Stand-in for keyBindFullscreen.getKeyCode() until KeyBinding is ported.
+    // Stand-ins for keyBindFullscreen/keyBindScreenshot.getKeyCode() until KeyBinding is ported.
     int keyBindFullscreen = Keyboard::KEY_F11;
+    int keyBindScreenshot = Keyboard::KEY_F2;
 };
 
 } // namespace mc

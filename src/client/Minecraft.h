@@ -6,17 +6,24 @@
 
 #include "client/main/GameConfiguration.h"
 #include "client/settings/GameSettings.h"
+#include "util/ResourceLocation.h"
 #include "util/Timer.h"
 
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace mc {
 
 class DefaultResourcePack;
+class Framebuffer;
 class GuiScreen;
+class IResourcePack;
+class SimpleReloadableResourceManager;
+class TextureManager;
 class WorldClient;
 
 class Minecraft {
@@ -43,6 +50,13 @@ public:
     static int getDebugFPS() { return debugFPS; }
 
     const DefaultResourcePack& getDefaultResourcePack() const { return *mcDefaultResourcePack; }
+    TextureManager& getTextureManager() { return *renderEngine; }
+    Framebuffer& getFramebuffer() { return *framebufferMc; }
+    // Java: languageManager.isCurrentLocaleUnicode() || forceUnicodeFont. Languages arrive with stage 2.2.
+    bool isUnicode() const { return gameSettings.forceUnicodeFont; }
+    void refreshResources();
+    // Draws a textured rectangle from a 256x256 texture with the WorldRenderer.
+    void draw(int posX, int posY, int texU, int texV, int width, int height, int red, int green, int blue, int alpha);
 
     int displayWidth;
     int displayHeight;
@@ -56,6 +70,7 @@ public:
 
 private:
     void startGame();
+    void drawSplashScreen(TextureManager& textureManager);
     void setWindowIcon();
     void createDisplay();
     void setInitialDisplayMode();
@@ -70,6 +85,8 @@ private:
 
     // Temporary input check for ROADMAP stage 1, removed once GuiScreen handles input.
     void debugInputTick();
+    // Temporary stand-in for EntityRenderer.updateCameraAndRender until GuiMainMenu is ported (stage 2.5).
+    void renderStage2Preview();
 
     static Minecraft* theMinecraft;
     static int debugFPS;
@@ -80,7 +97,12 @@ private:
     int tempDisplayHeight;
     std::filesystem::path mcDataDir;
     std::string launchedVersion;
-    std::unique_ptr<DefaultResourcePack> mcDefaultResourcePack;
+    std::shared_ptr<DefaultResourcePack> mcDefaultResourcePack;
+    std::vector<std::shared_ptr<IResourcePack>> defaultResourcePacks;
+    std::unique_ptr<SimpleReloadableResourceManager> mcResourceManager;
+    std::unique_ptr<TextureManager> renderEngine;
+    std::unique_ptr<Framebuffer> framebufferMc;
+    std::optional<ResourceLocation> mojangLogo;
     volatile bool running = true;
     bool isGamePaused = false;
     int fpsCounter = 0;

@@ -106,15 +106,16 @@
 Оригинал: `client/gui/GuiMainMenu.java` и всё, от чего он зависит.
 
 ### 2.1 Рендер-ядро (минимум для 2D)
-- [ ] `DxStateManager` — замена `GlStateManager` (см. раздел архитектуры): blend, alpha test, depth, cull, color, bindTexture
-- [ ] Стек матриц, `ortho`/`perspective`, `Tessellator` + `WorldRenderer` + `DefaultVertexFormats`
-- [ ] Базовые шейдеры: `POSITION_TEX`, `POSITION_COLOR`, `POSITION_TEX_COLOR`
-- [ ] `TextureManager`, `SimpleTexture`, `DynamicTexture` (point-фильтрация, как в оригинале)
-- [ ] `ScaledResolution` (GUI scale auto/1/2/3/4)
-- [ ] `Framebuffer` (render target) — нужен для размытия панорамы
+- [x] Эмуляция OpenGL 1.x на D3D11 (`render/gl/GL.h`): состояние, стеки матриц, текстуры и FBO с целочисленными именами, текущие цвет/нормаль/UV, immediate mode (`glBegin`), `glPushAttrib`, `glCopyTexSubImage2D`, `glReadPixels`/`glGetTexImage`; render target'ы хранятся снизу вверх, как в GL, в swapchain кадр переворачивается при Present
+- [x] Uber-шейдер фиксированного конвейера (`shaders/FixedFunction.hlsl`, компиляция `fxc` при сборке): модуляция текстурой и lightmap, туман linear/exp/exp2, альфа-тест с любым компаратором GL, освещение 2 источниками + `GL_COLOR_MATERIAL`, `GL_FLAT` с провоцирующей вершиной GL
+- [x] `DxStateManager` — замена `GlStateManager` с тем же кешем состояний (чтобы воспроизводились его особенности при `pushAttrib/popAttrib`), `OpenGlHelper`
+- [x] `Tessellator` + `WorldRenderer` + `WorldVertexBufferUploader` + `VertexFormat`/`DefaultVertexFormats`; недостающие атрибуты берутся из текущих значений GL
+- [x] `TextureManager`, `SimpleTexture` (+ `.mcmeta` blur/clamp), `DynamicTexture`, `TextureUtil` (загрузка, мипмапы, missing texture)
+- [x] `ScaledResolution`, `Framebuffer`
+- [ ] Не эмулируется (пока не нужно меню): `GL_COMBINE`-режимы текстур, texgen, logic op, толстые линии, очистка с частичной маской/scissor'ом
 
 ### 2.2 Ресурсы и локализация
-- [ ] `IResourceManager`, `DefaultResourcePack` (jar + индекс ассетов)
+- [x] `IResourceManager`, `SimpleReloadableResourceManager`/`FallbackResourceManager`, `SimpleResource` с `.mcmeta`, `DefaultResourcePack` (jar + индекс ассетов)
 - [ ] `I18n` / `Locale`: `.lang`-файлы (в 1.8.9 ещё `key=value`, не JSON), смена языка
 - [ ] `GameSettings`: чтение/запись `options.txt` (формат совместим с оригиналом)
 
@@ -138,7 +139,8 @@
 - [ ] Строки "Minecraft 1.8.9" слева внизу и "Copyright Mojang AB. Do not distribute!" справа
 - [ ] Предупреждение `title.oldgl1/oldgl2` (нет OpenGL 2.0) в оригинале: убираем (неприменимо к D3D11)
 - [ ] Заглушки для экранов, которые ещё не перенесены (Singleplayer/Multiplayer/Realms) — `GuiErrorScreen` "Not implemented yet"
-- [ ] Загрузочный экран Mojang (`LoadingScreenRenderer`, логотип на белом фоне) перед меню
+- [x] Загрузочный экран Mojang (`drawSplashScreen`: логотип на белом фоне) перед меню
+- [ ] `LoadingScreenRenderer` (прогресс загрузки миров) — вместе с одиночной игрой
 
 **Готово, когда:** скриншот меню в C++ попиксельно совпадает со скриншотом Java-версии при одинаковом размере окна, GUI scale и сплэше (сравнение скриптом, допуск — только панорама из-за float).
 
@@ -148,7 +150,7 @@
 - [ ] `GuiScreenResourcePacks`: загрузка ресурспаков из папки `resourcepacks` (zip и папки), перезагрузка ресурсов
 - [ ] Полноценный `SoundHandler`/`SoundManager`: `sounds.json`, категории громкости, музыка в меню (`music.menu`)
 - [ ] Mipmap-уровни, анизотропия — как настройки
-- [ ] Скриншоты по F2 (`ScreenShotHelper`, PNG в `screenshots/`)
+- [x] Скриншоты по F2 (`ScreenShotHelper`, PNG в `screenshots/`); сообщение в чат — с чатом
 
 **Готово, когда:** все настройки меняются, сохраняются в `options.txt` и переживают перезапуск; ресурспак меняет текстуры меню.
 

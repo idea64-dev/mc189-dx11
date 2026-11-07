@@ -1,8 +1,18 @@
 #include "client/Minecraft.h"
 
+#include "client/gui/ScaledResolution.h"
+#include "client/renderer/DxStateManager.h"
+#include "client/renderer/Tessellator.h"
+#include "client/renderer/texture/SimpleTexture.h"
+#include "client/renderer/texture/TextureManager.h"
 #include "client/renderer/texture/TextureUtil.h"
+#include "client/renderer/vertex/DefaultVertexFormats.h"
 #include "client/resources/DefaultResourcePack.h"
 #include "client/resources/ResourceIndex.h"
+#include "client/resources/SimpleReloadableResourceManager.h"
+#include "client/shader/Framebuffer.h"
+#include "render/gl/GL.h"
+#include "util/ScreenShotHelper.h"
 #include "core/Log.h"
 #include "core/ZipArchive.h"
 #include "core/StringUtil.h"
@@ -21,6 +31,12 @@
 
 namespace mc {
 
+namespace {
+
+const ResourceLocation locationMojangPng("textures/gui/title/mojang.png");
+
+} // namespace
+
 Minecraft* Minecraft::theMinecraft = nullptr;
 int Minecraft::debugFPS = 0;
 
@@ -36,7 +52,7 @@ Minecraft::Minecraft(const GameConfiguration& gameConfig)
     , startNanoTime(Sys::nanoTime())
 {
     theMinecraft = this;
-    mcDefaultResourcePack = std::make_unique<DefaultResourcePack>(
+    mcDefaultResourcePack = std::make_shared<DefaultResourcePack>(
         std::make_shared<const ZipArchive>(gameConfig.folderInfo.clientJar),
         ResourceIndex(gameConfig.folderInfo.assetsDir, gameConfig.folderInfo.assetIndex).getResourceMap());
 }
@@ -95,8 +111,95 @@ void Minecraft::startGame()
     displayHeight = Display::getHeight();
     Display::setVSyncEnabled(gameSettings.enableVsync);
 
+    framebufferMc = std::make_unique<Framebuffer>(displayWidth, displayHeight, true);
+    framebufferMc->setFramebufferColor(0.0f, 0.0f, 0.0f, 0.0f);
+    defaultResourcePacks.push_back(mcDefaultResourcePack);
+    mcResourceManager = std::make_unique<SimpleReloadableResourceManager>();
+    refreshResources();
+    renderEngine = std::make_unique<TextureManager>(*mcResourceManager);
+    mcResourceManager->registerReloadListener(*renderEngine);
+    drawSplashScreen(*renderEngine);
+
+    DxStateManager::enableTexture2D();
+    DxStateManager::shadeModel(7425);
+    DxStateManager::clearDepth(1.0);
+    DxStateManager::enableDepth();
+    DxStateManager::depthFunc(515);
+    DxStateManager::enableAlpha();
+    DxStateManager::alphaFunc(516, 0.1f);
+    DxStateManager::cullFace(1029);
+    DxStateManager::matrixMode(5889);
+    DxStateManager::loadIdentity();
+    DxStateManager::matrixMode(5888);
+    DxStateManager::viewport(0, 0, displayWidth, displayHeight);
+
     if (gameSettings.fullScreen && !fullscreen)
         toggleFullscreen();
+}
+
+void Minecraft::refreshResources()
+{
+    // Java also adds the selected resource packs (stage 3) and reloads languages and renderers.
+    mcResourceManager->reloadResources(defaultResourcePacks);
+}
+
+void Minecraft::drawSplashScreen(TextureManager& textureManager)
+{
+    const ScaledResolution scaledresolution(*this);
+    const int i = scaledresolution.getScaleFactor();
+    Framebuffer framebuffer(scaledresolution.getScaledWidth() * i, scaledresolution.getScaledHeight() * i, true);
+    framebuffer.bindFramebuffer(false);
+    DxStateManager::matrixMode(5889);
+    DxStateManager::loadIdentity();
+    DxStateManager::ortho(0.0, static_cast<double>(scaledresolution.getScaledWidth()), static_cast<double>(scaledresolution.getScaledHeight()), 0.0, 1000.0, 3000.0);
+    DxStateManager::matrixMode(5888);
+    DxStateManager::loadIdentity();
+    DxStateManager::translate(0.0f, 0.0f, -2000.0f);
+    DxStateManager::disableLighting();
+    DxStateManager::disableFog();
+    DxStateManager::disableDepth();
+    DxStateManager::enableTexture2D();
+
+    try {
+        const std::vector<uint8_t> data = mcDefaultResourcePack->getInputStream(locationMojangPng);
+        mojangLogo = textureManager.getDynamicTextureLocation("logo", std::make_shared<DynamicTexture>(TextureUtil::readBufferedImage(data)));
+        textureManager.bindTexture(*mojangLogo);
+    } catch (const std::exception& e) {
+        Log::error("Unable to load logo: {} ({})", locationMojangPng.toString(), e.what());
+    }
+
+    Tessellator& tessellator = Tessellator::getInstance();
+    WorldRenderer& worldrenderer = tessellator.getWorldRenderer();
+    worldrenderer.begin(7, DefaultVertexFormats::POSITION_TEX_COLOR);
+    worldrenderer.pos(0.0, static_cast<double>(displayHeight), 0.0).tex(0.0, 0.0).color(255, 255, 255, 255).endVertex();
+    worldrenderer.pos(static_cast<double>(displayWidth), static_cast<double>(displayHeight), 0.0).tex(0.0, 0.0).color(255, 255, 255, 255).endVertex();
+    worldrenderer.pos(static_cast<double>(displayWidth), 0.0, 0.0).tex(0.0, 0.0).color(255, 255, 255, 255).endVertex();
+    worldrenderer.pos(0.0, 0.0, 0.0).tex(0.0, 0.0).color(255, 255, 255, 255).endVertex();
+    tessellator.draw();
+    DxStateManager::color(1.0f, 1.0f, 1.0f, 1.0f);
+    const int j = 256;
+    const int k = 256;
+    draw((scaledresolution.getScaledWidth() - j) / 2, (scaledresolution.getScaledHeight() - k) / 2, 0, 0, j, k, 255, 255, 255, 255);
+    DxStateManager::disableLighting();
+    DxStateManager::disableFog();
+    framebuffer.unbindFramebuffer();
+    framebuffer.framebufferRender(scaledresolution.getScaledWidth() * i, scaledresolution.getScaledHeight() * i);
+    DxStateManager::enableAlpha();
+    DxStateManager::alphaFunc(516, 0.1f);
+    updateDisplay();
+}
+
+void Minecraft::draw(int posX, int posY, int texU, int texV, int width, int height, int red, int green, int blue, int alpha)
+{
+    const float f = 0.00390625f;
+    const float f1 = 0.00390625f;
+    WorldRenderer& worldrenderer = Tessellator::getInstance().getWorldRenderer();
+    worldrenderer.begin(7, DefaultVertexFormats::POSITION_TEX_COLOR);
+    worldrenderer.pos(posX, posY + height, 0.0).tex(static_cast<float>(texU) * f, static_cast<float>(texV + height) * f1).color(red, green, blue, alpha).endVertex();
+    worldrenderer.pos(posX + width, posY + height, 0.0).tex(static_cast<float>(texU + width) * f, static_cast<float>(texV + height) * f1).color(red, green, blue, alpha).endVertex();
+    worldrenderer.pos(posX + width, posY, 0.0).tex(static_cast<float>(texU + width) * f, static_cast<float>(texV) * f1).color(red, green, blue, alpha).endVertex();
+    worldrenderer.pos(posX, posY, 0.0).tex(static_cast<float>(texU) * f, static_cast<float>(texV) * f1).color(red, green, blue, alpha).endVertex();
+    Tessellator::getInstance().draw();
 }
 
 void Minecraft::setWindowIcon()
@@ -130,6 +233,7 @@ void Minecraft::createDisplay()
     Display::setResizable(true);
     Display::setTitle("Minecraft 1.8.9");
     Display::create();
+    GL::initialize(Display::getDevice());
 }
 
 void Minecraft::runGameLoop()
@@ -148,11 +252,16 @@ void Minecraft::runGameLoop()
     for (int j = 0; j < timer.elapsedTicks; ++j)
         runTick();
 
-    // Java: GlStateManager.clear(16640) + framebufferMc + entityRenderer.updateCameraAndRender (stage 2+).
-    // Placeholder sky colour until there is something to draw.
-    RenderDevice& device = Display::getDevice();
-    device.bindBackBuffer();
-    device.clear(0.47f, 0.65f, 1.0f, 1.0f);
+    DxStateManager::pushMatrix();
+    DxStateManager::clear(16640);
+    framebufferMc->bindFramebuffer(true);
+    DxStateManager::enableTexture2D();
+    renderStage2Preview(); // Java: entityRenderer.updateCameraAndRender(timer.renderPartialTicks, i)
+    framebufferMc->unbindFramebuffer();
+    DxStateManager::popMatrix();
+    DxStateManager::pushMatrix();
+    framebufferMc->framebufferRender(displayWidth, displayHeight);
+    DxStateManager::popMatrix();
 
     updateDisplay();
     std::this_thread::yield();
@@ -240,8 +349,11 @@ void Minecraft::dispatchKeypresses()
         if (Keyboard::getEventKeyState()) {
             if (i == gameSettings.keyBindFullscreen) {
                 toggleFullscreen();
+            } else if (i == gameSettings.keyBindScreenshot) {
+                // Java prints the result to the chat (stage 8).
+                ScreenShotHelper::saveScreenshot(mcDataDir, displayWidth, displayHeight, *framebufferMc);
             }
-            // keyBindScreenshot: stage 3. Twitch stream keys are not ported.
+            // Twitch stream keys are not ported.
         }
     }
 }
@@ -315,8 +427,73 @@ void Minecraft::resize(int width, int height)
 
 void Minecraft::updateFramebufferSize()
 {
-    // Java: framebufferMc.createBindFramebuffer(displayWidth, displayHeight) and the shader group (stage 2+).
-    // The swapchain itself is already resized by Display.
+    framebufferMc->createBindFramebuffer(displayWidth, displayHeight);
+    // Java: entityRenderer.updateShaderGroupSize(displayWidth, displayHeight) (stage 15).
+}
+
+void Minecraft::renderStage2Preview()
+{
+    // Temporary: exercises the render core (textures, blending, alpha test, matrices, gradients) the way the
+    // GUI will. Replaced by the real screen rendering in stage 2.4/2.5.
+    const ScaledResolution scaledresolution(*this);
+    const int width = scaledresolution.getScaledWidth();
+    const int height = scaledresolution.getScaledHeight();
+
+    // EntityRenderer.setupOverlayRendering
+    DxStateManager::clear(256);
+    DxStateManager::matrixMode(5889);
+    DxStateManager::loadIdentity();
+    DxStateManager::ortho(0.0, scaledresolution.getScaledWidth_double(), scaledresolution.getScaledHeight_double(), 0.0, 1000.0, 3000.0);
+    DxStateManager::matrixMode(5888);
+    DxStateManager::loadIdentity();
+    DxStateManager::translate(0.0f, 0.0f, -2000.0f);
+
+    // GuiScreen.drawBackground(0)
+    Tessellator& tessellator = Tessellator::getInstance();
+    WorldRenderer& worldrenderer = tessellator.getWorldRenderer();
+    DxStateManager::disableLighting();
+    DxStateManager::disableFog();
+    renderEngine->bindTexture(ResourceLocation("textures/gui/options_background.png"));
+    DxStateManager::color(1.0f, 1.0f, 1.0f, 1.0f);
+    const float f = 32.0f;
+    worldrenderer.begin(7, DefaultVertexFormats::POSITION_TEX_COLOR);
+    worldrenderer.pos(0.0, height, 0.0).tex(0.0, static_cast<float>(height) / f).color(64, 64, 64, 255).endVertex();
+    worldrenderer.pos(width, height, 0.0).tex(static_cast<float>(width) / f, static_cast<float>(height) / f).color(64, 64, 64, 255).endVertex();
+    worldrenderer.pos(width, 0.0, 0.0).tex(static_cast<float>(width) / f, 0.0).color(64, 64, 64, 255).endVertex();
+    worldrenderer.pos(0.0, 0.0, 0.0).tex(0.0, 0.0).color(64, 64, 64, 255).endVertex();
+    tessellator.draw();
+
+    // Gui.drawGradientRect: translucent top-to-bottom gradient band
+    DxStateManager::disableTexture2D();
+    DxStateManager::enableBlend();
+    DxStateManager::disableAlpha();
+    DxStateManager::tryBlendFuncSeparate(770, 771, 1, 0);
+    DxStateManager::shadeModel(7425);
+    worldrenderer.begin(7, DefaultVertexFormats::POSITION_COLOR);
+    worldrenderer.pos(width, 10.0, 0.0).color(0x10, 0x10, 0x10, 0xC0).endVertex();
+    worldrenderer.pos(0.0, 10.0, 0.0).color(0x10, 0x10, 0x10, 0xC0).endVertex();
+    worldrenderer.pos(0.0, 40.0, 0.0).color(0x60, 0x20, 0xA0, 0x50).endVertex();
+    worldrenderer.pos(width, 40.0, 0.0).color(0x60, 0x20, 0xA0, 0x50).endVertex();
+    tessellator.draw();
+    DxStateManager::shadeModel(7424);
+    DxStateManager::enableAlpha();
+    DxStateManager::enableTexture2D();
+
+    // The Mojang logo, scaled down and spinning, blended over the background
+    renderEngine->bindTexture(mojangLogo ? *mojangLogo : ResourceLocation("textures/gui/title/mojang.png"));
+    DxStateManager::pushMatrix();
+    DxStateManager::translate(static_cast<float>(width) / 2.0f, static_cast<float>(height) / 2.0f + 20.0f, 0.0f);
+    DxStateManager::rotate(static_cast<float>(getSystemTime() % 7200) / 20.0f, 0.0f, 0.0f, 1.0f);
+    DxStateManager::scale(0.5f, 0.5f, 0.5f);
+    DxStateManager::color(1.0f, 1.0f, 1.0f, 0.75f);
+    draw(-128, -128, 0, 0, 256, 256, 255, 255, 255, 191);
+    DxStateManager::popMatrix();
+    DxStateManager::disableBlend();
+
+    // A button from widgets.png at its native 200x20 size: must be pixel-exact against the original
+    renderEngine->bindTexture(ResourceLocation("textures/gui/widgets.png"));
+    DxStateManager::color(1.0f, 1.0f, 1.0f, 1.0f);
+    draw(width / 2 - 100, height - 30, 0, 66, 200, 20, 255, 255, 255, 255);
 }
 
 void Minecraft::shutdown()
@@ -327,6 +504,12 @@ void Minecraft::shutdown()
 void Minecraft::shutdownMinecraftApplet()
 {
     Log::info("Stopping!");
+    // GL objects go before the context, like the JVM releasing them before Display.destroy().
+    renderEngine.reset();
+    framebufferMc.reset();
+    mcResourceManager.reset();
+    if (Display::isCreated())
+        GL::shutdown();
     Display::destroy();
 }
 

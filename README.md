@@ -46,7 +46,7 @@ run.bat release --fullscreen
 
 ```
 build\debug\MinecraftDX11Tests.exe
-powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: запуск, ввод, иконка, F11, ресайз, закрытие
+powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: запуск, ввод, иконка, F11, ресайз, кадры по F2
 ```
 
 Сверка с Java: `tools\reference\generate.bat` снимает эталонные значения `java.util.Random`, `MathHelper` и
@@ -60,9 +60,10 @@ powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: з
 src/            исходники; подкаталоги повторяют пакеты net.minecraft.*
   core/         логгер, крэш-хендлер, Java-семантика (Java.h, StrictMath), zip, SHA-1
   platform/     замена LWJGL 2: Display (окно), Keyboard, Mouse, Sys
-  render/       Direct3D 11: устройство и swapchain (дальше: DxStateManager вместо GlStateManager, шейдеры)
-  client/       Minecraft, main, settings, resources, renderer/texture (дальше: gui, audio)
-  util/         Timer, MathHelper, Random (java.util.Random), ResourceLocation
+  render/       Direct3D 11: устройство, swapchain, эмуляция OpenGL 1.x (render/gl)
+  client/       Minecraft, main, settings, resources, renderer (DxStateManager, Tessellator, текстуры), shader, gui
+  util/         Timer, MathHelper, Random (java.util.Random), ResourceLocation, ScreenShotHelper
+shaders/        HLSL фиксированного конвейера, компилируется fxc при сборке
 tests/          doctest-тесты; reference/ — эталоны, снятые на Java
 tools/          smoke-тест окна; reference/ — генератор эталонов на Java
 third_party/    miniz, stb_image, nlohmann/json, doctest
