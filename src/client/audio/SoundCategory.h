@@ -3,6 +3,7 @@
 // Original: net/minecraft/client/audio/SoundCategory.java
 
 #include <array>
+#include <optional>
 #include <string_view>
 
 namespace mc {
@@ -26,6 +27,16 @@ constexpr std::string_view getCategoryName(SoundCategory category)
     case SoundCategory::AMBIENT: return "ambient";
     }
     return "";
+}
+
+// Java: SoundCategory.getCategory(name), null when unknown.
+constexpr std::optional<SoundCategory> getSoundCategoryByName(std::string_view name)
+{
+    for (const SoundCategory category : kSoundCategories) {
+        if (getCategoryName(category) == name)
+            return category;
+    }
+    return std::nullopt;
 }
 
 constexpr int getCategoryId(SoundCategory category)

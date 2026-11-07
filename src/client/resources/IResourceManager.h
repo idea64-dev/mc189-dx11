@@ -22,6 +22,8 @@ public:
     // Throws ResourceNotFoundException (Java: FileNotFoundException) when no pack has the resource.
     virtual std::shared_ptr<IResource> getResource(const ResourceLocation& location) const = 0;
     virtual std::vector<std::shared_ptr<IResource>> getAllResources(const ResourceLocation& location) const = 0;
+    // Port addition: existence without reading the data (Java opened a stream and closed it).
+    virtual bool resourceExists(const ResourceLocation& location) const = 0;
 };
 
 class IResourceManagerReloadListener {

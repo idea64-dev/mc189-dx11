@@ -57,6 +57,15 @@ std::vector<std::shared_ptr<IResource>> FallbackResourceManager::getAllResources
     return list;
 }
 
+bool FallbackResourceManager::resourceExists(const ResourceLocation& location) const
+{
+    for (const auto& pack : resourcePacks) {
+        if (pack->resourceExists(location))
+            return true;
+    }
+    return false;
+}
+
 // --- SimpleReloadableResourceManager ---
 
 void SimpleReloadableResourceManager::reloadResourcePack(std::shared_ptr<IResourcePack> resourcePack)
@@ -87,6 +96,12 @@ std::vector<std::shared_ptr<IResource>> SimpleReloadableResourceManager::getAllR
     if (it == domainResourceManagers.end())
         throw ResourceNotFoundException(location.toString());
     return it->second.getAllResources(location);
+}
+
+bool SimpleReloadableResourceManager::resourceExists(const ResourceLocation& location) const
+{
+    const auto it = domainResourceManagers.find(location.getResourceDomain());
+    return it != domainResourceManagers.end() && it->second.resourceExists(location);
 }
 
 void SimpleReloadableResourceManager::clearResources()

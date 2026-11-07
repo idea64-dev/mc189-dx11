@@ -17,6 +17,10 @@ target_include_directories(miniz PUBLIC third_party)
 target_compile_definitions(miniz PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES _CRT_SECURE_NO_WARNINGS)
 target_compile_options(miniz PRIVATE /W0)
 
+add_library(stb_vorbis STATIC third_party/stb/stb_vorbis.c)
+target_compile_definitions(stb_vorbis PRIVATE STB_VORBIS_NO_STDIO _CRT_SECURE_NO_WARNINGS)
+target_compile_options(stb_vorbis PRIVATE /W0)
+
 add_library(third_party_headers INTERFACE)
 target_include_directories(third_party_headers SYSTEM INTERFACE third_party)
 
@@ -67,7 +71,7 @@ target_compile_definitions(mc_engine PUBLIC
 target_compile_options(mc_engine PUBLIC /W4 /permissive- /utf-8 /fp:precise)
 target_link_libraries(mc_engine
     PUBLIC d3d11 dxgi dxguid
-    PRIVATE miniz third_party_headers dbghelp bcrypt
+    PRIVATE miniz stb_vorbis third_party_headers dbghelp bcrypt xaudio2
 )
 
 # --- Game ---

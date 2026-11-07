@@ -17,6 +17,7 @@ public:
     // The last added pack that has the resource wins; its .mcmeta comes from the last pack that has one.
     std::shared_ptr<IResource> getResource(const ResourceLocation& location) const override;
     std::vector<std::shared_ptr<IResource>> getAllResources(const ResourceLocation& location) const override;
+    bool resourceExists(const ResourceLocation& location) const override;
 
     static ResourceLocation getLocationMcmeta(const ResourceLocation& location);
 
@@ -31,6 +32,7 @@ public:
     std::set<std::string> getResourceDomains() const override;
     std::shared_ptr<IResource> getResource(const ResourceLocation& location) const override;
     std::vector<std::shared_ptr<IResource>> getAllResources(const ResourceLocation& location) const override;
+    bool resourceExists(const ResourceLocation& location) const override;
 
     void reloadResources(const std::vector<std::shared_ptr<IResourcePack>>& resourcePacks) override;
     void registerReloadListener(IResourceManagerReloadListener& reloadListener) override;
