@@ -60,7 +60,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: з
 src/            исходники; подкаталоги повторяют пакеты net.minecraft.*
   core/         логгер, крэш-хендлер, Java-семантика (Java.h, StrictMath), zip, SHA-1
   platform/     замена LWJGL 2: Display (окно), Keyboard, Mouse, Sys
-  render/       Direct3D 11: устройство и swapchain (дальше: эмуляция GlStateManager, шейдеры)
+  render/       Direct3D 11: устройство и swapchain (дальше: DxStateManager вместо GlStateManager, шейдеры)
   client/       Minecraft, main, settings, resources, renderer/texture (дальше: gui, audio)
   util/         Timer, MathHelper, Random (java.util.Random), ResourceLocation
 tests/          doctest-тесты; reference/ — эталоны, снятые на Java

@@ -47,12 +47,12 @@
 Код 1.8.9 рисует через фиксированный конвейер OpenGL 1.x: стек матриц, `glBegin`-подобный `Tessellator/WorldRenderer`, display lists, альфа-тест, туман, освещение, lightmap на втором текстурном юните. Всё это проходит через `GlStateManager` и `OpenGlHelper`.
 
 План — два уровня:
-- **GUI, предметы в руке, сущности, частицы:** тонкий слой с API `GlStateManager`/`Tessellator` поверх D3D11. Тут много мелкого кода с точными координатами и состояниями, и построчный перенос — самый надёжный путь к попиксельному совпадению. Внутри слоя — батчинг и кеши, снаружи — привычные вызовы.
+- **GUI, предметы в руке, сущности, частицы:** тонкий слой `DxStateManager` + `Tessellator` поверх D3D11 с тем же API, что у `GlStateManager`. Тут много мелкого кода с точными координатами и состояниями, и построчный перенос — самый надёжный путь к попиксельному совпадению. Внутри слоя — батчинг и кеши, снаружи — привычные вызовы.
 - **Мир (чанки, небо, облака, погода):** свой D3D11-рендер без эмуляции: статические буферы чанков, меньше draw call'ов, многопоточный мешинг. Требование — та же картинка: те же вершины, UV, цвета, AO, свет, туман, порядок слоёв.
 
 Детали слоя эмуляции:
 
-- `GlStateManager` кеширует состояния (blend, depth, cull, alpha test, fog, color, текстуры) и собирает из них объекты `ID3D11BlendState / DepthStencilState / RasterizerState / SamplerState` (с кешем по ключу).
+- `DxStateManager` (замена `GlStateManager`) кеширует состояния (blend, depth, cull, alpha test, fog, color, текстуры) и собирает из них объекты `ID3D11BlendState / DepthStencilState / RasterizerState / SamplerState` (с кешем по ключу).
 - Стек матриц (`pushMatrix/translate/rotate/scale`, `MODELVIEW`/`PROJECTION`/`TEXTURE`) на DirectXMath, отдаётся в constant buffer.
 - Фиксированный конвейер заменяется набором "uber"-шейдеров HLSL с флагами: текстура, цвет вершины, альфа-тест (`discard`), туман (linear/exp), 2 источника света для сущностей, lightmap.
 - `Tessellator/WorldRenderer` пишет в динамический vertex buffer (`D3D11_MAP_WRITE_NO_OVERWRITE`, кольцевой буфер), форматы из `DefaultVertexFormats` → `ID3D11InputLayout`.
@@ -106,7 +106,7 @@
 Оригинал: `client/gui/GuiMainMenu.java` и всё, от чего он зависит.
 
 ### 2.1 Рендер-ядро (минимум для 2D)
-- [ ] `GlStateManager`-эмуляция (см. раздел архитектуры): blend, alpha test, depth, cull, color, bindTexture
+- [ ] `DxStateManager` — замена `GlStateManager` (см. раздел архитектуры): blend, alpha test, depth, cull, color, bindTexture
 - [ ] Стек матриц, `ortho`/`perspective`, `Tessellator` + `WorldRenderer` + `DefaultVertexFormats`
 - [ ] Базовые шейдеры: `POSITION_TEX`, `POSITION_COLOR`, `POSITION_TEX_COLOR`
 - [ ] `TextureManager`, `SimpleTexture`, `DynamicTexture` (point-фильтрация, как в оригинале)

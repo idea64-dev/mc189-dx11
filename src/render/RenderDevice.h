@@ -33,7 +33,7 @@ public:
     // Binds the back buffer and depth buffer with a full-window viewport.
     // Flip-model swapchains unbind the back buffer on Present, so this runs every frame.
     void bindBackBuffer();
-    // Equivalent of GlStateManager.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT).
+    // Equivalent of Java GlStateManager.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT).
     void clear(float red, float green, float blue, float alpha);
     void present(bool vsync);
 
