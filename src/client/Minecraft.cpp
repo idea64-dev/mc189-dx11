@@ -1,8 +1,12 @@
 #include "client/Minecraft.h"
 
+#include "client/audio/SoundHandler.h"
 #include "client/gui/FontRenderer.h"
+#include "client/gui/GuiMainMenu.h"
+#include "client/gui/GuiScreen.h"
 #include "client/gui/ScaledResolution.h"
 #include "client/renderer/DxStateManager.h"
+#include "client/renderer/EntityRenderer.h"
 #include "client/renderer/Tessellator.h"
 #include "client/renderer/texture/SimpleTexture.h"
 #include "client/renderer/texture/TextureManager.h"
@@ -14,16 +18,15 @@
 #include "client/resources/ResourceIndex.h"
 #include "client/resources/SimpleReloadableResourceManager.h"
 #include "client/shader/Framebuffer.h"
-#include "render/gl/GL.h"
-#include "util/ScreenShotHelper.h"
 #include "core/Log.h"
-#include "core/ZipArchive.h"
 #include "core/StringUtil.h"
+#include "core/ZipArchive.h"
 #include "platform/Display.h"
 #include "platform/Keyboard.h"
 #include "platform/Mouse.h"
 #include "platform/Sys.h"
-#include "render/RenderDevice.h"
+#include "render/gl/GL.h"
+#include "util/ScreenShotHelper.h"
 
 #include <Windows.h>
 
@@ -112,11 +115,11 @@ void Minecraft::startGame()
     // The window size is DPI-scaled by Display, so take the real client size.
     displayWidth = Display::getWidth();
     displayHeight = Display::getHeight();
-    Display::setVSyncEnabled(gameSettings->enableVsync);
 
     framebufferMc = std::make_unique<Framebuffer>(displayWidth, displayHeight, true);
     framebufferMc->setFramebufferColor(0.0f, 0.0f, 0.0f, 0.0f);
     defaultResourcePacks.push_back(mcDefaultResourcePack);
+    // Java: ResourcePackRepository (stage 3)
     mcResourceManager = std::make_unique<SimpleReloadableResourceManager>();
     mcLanguageManager = std::make_unique<LanguageManager>(gameSettings->language);
     mcResourceManager->registerReloadListener(*mcLanguageManager);
@@ -125,7 +128,11 @@ void Minecraft::startGame()
     mcResourceManager->registerReloadListener(*renderEngine);
     drawSplashScreen(*renderEngine);
 
-    // Java: skinManager, saveLoader, mcSoundHandler, mcMusicTicker come before the fonts (later stages).
+    // Java: skinManager, saveLoader (stage 5)
+    mcSoundHandler = std::make_unique<SoundHandler>(*mcResourceManager, *gameSettings);
+    mcResourceManager->registerReloadListener(*mcSoundHandler);
+    // Java: mcMusicTicker (stage 3)
+
     fontRendererObj = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii.png"), *renderEngine, false);
     if (!gameSettings->language.empty()) {
         fontRendererObj->setUnicodeFlag(isUnicode());
@@ -134,6 +141,7 @@ void Minecraft::startGame()
     standardGalacticFontRenderer = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii_sga.png"), *renderEngine, false);
     mcResourceManager->registerReloadListener(*fontRendererObj);
     mcResourceManager->registerReloadListener(*standardGalacticFontRenderer);
+    // Java: GrassColorReloadListener, FoliageColorReloadListener, AchievementList, mouseHelper (stage 4+)
 
     DxStateManager::enableTexture2D();
     DxStateManager::shadeModel(7425);
@@ -146,10 +154,25 @@ void Minecraft::startGame()
     DxStateManager::matrixMode(5889);
     DxStateManager::loadIdentity();
     DxStateManager::matrixMode(5888);
+
+    // Java: texture map, model manager, render item/manager, block renderer (stage 7)
+    entityRenderer = std::make_unique<EntityRenderer>(*this);
+    // Java: renderGlobal, guiAchievement (stage 7/12)
     DxStateManager::viewport(0, 0, displayWidth, displayHeight);
+    // Java: effectRenderer (stage 15), ingameGUI (stage 8)
+
+    // Java: connects to --server here (stage 14).
+    displayGuiScreen(std::make_shared<GuiMainMenu>());
+
+    if (mojangLogo)
+        renderEngine->deleteTexture(*mojangLogo);
+    mojangLogo.reset();
+    // Java: loadingScreen = new LoadingScreenRenderer(this) (stage 5)
 
     if (gameSettings->fullScreen && !fullscreen)
         toggleFullscreen();
+
+    Display::setVSyncEnabled(gameSettings->enableVsync);
 }
 
 void Minecraft::refreshResources()
@@ -281,6 +304,8 @@ void Minecraft::createDisplay()
 
 void Minecraft::runGameLoop()
 {
+    const int64_t i = Sys::nanoTime();
+
     if (Display::isCreated() && Display::isCloseRequested())
         shutdown();
 
@@ -292,14 +317,20 @@ void Minecraft::runGameLoop()
         timer.updateTimer();
     }
 
+    // Java: scheduledExecutables (stage 9)
+
     for (int j = 0; j < timer.elapsedTicks; ++j)
         runTick();
+
+    // Java: sound listener (stage 13)
 
     DxStateManager::pushMatrix();
     DxStateManager::clear(16640);
     framebufferMc->bindFramebuffer(true);
     DxStateManager::enableTexture2D();
-    renderStage2Preview(); // Java: entityRenderer.updateCameraAndRender(timer.renderPartialTicks, i)
+    if (!skipRenderWorld)
+        entityRenderer->updateCameraAndRender(timer.renderPartialTicks, i);
+    // Java: profiler chart (stage 8), guiAchievement.updateAchievementWindow() (stage 12)
     framebufferMc->unbindFramebuffer();
     DxStateManager::popMatrix();
     DxStateManager::pushMatrix();
@@ -310,6 +341,8 @@ void Minecraft::runGameLoop()
     std::this_thread::yield();
 
     ++fpsCounter;
+    // Java: isGamePaused = isSingleplayer() && currentScreen.doesGuiPauseGame() && !integratedServer.getPublic()
+    isGamePaused = false;
     const int64_t k = Sys::nanoTime();
     startNanoTime = k;
 
@@ -324,14 +357,6 @@ void Minecraft::runGameLoop()
             gameSettings->clouds == 0 ? "" : (gameSettings->clouds == 1 ? " fast-clouds" : " fancy-clouds"));
         debugUpdateTime += 1000LL;
         fpsCounter = 0;
-
-        // Stage 1 only: no F3 screen yet, so show the debug line in the title.
-        Display::setTitle(std::format("Minecraft 1.8.9 - {}", debug));
-        if (debugMouseDX != 0 || debugMouseDY != 0) {
-            Log::info("[input test] grabbed mouse moved dx={} dy={}", debugMouseDX, debugMouseDY);
-            debugMouseDX = 0;
-            debugMouseDY = 0;
-        }
     }
 
     if (isFramerateLimitBelowMax())
@@ -340,58 +365,121 @@ void Minecraft::runGameLoop()
 
 void Minecraft::runTick()
 {
-    // Java: with no screen open, mouse and keyboard events drive the player and key bindings.
-    debugInputTick();
+    // Java: rightClickDelayTimer, ingameGUI.updateTick(), entityRenderer.getMouseOver(), playerController (stage 8)
+    if (!isGamePaused)
+        renderEngine->tick();
 
-    while (Keyboard::next()) {
-        const int k = Keyboard::getEventKey() == 0 ? Keyboard::getEventCharacter() + 256 : Keyboard::getEventKey();
-        KeyBinding::setKeyBindState(k, Keyboard::getEventKeyState());
-        if (Keyboard::getEventKeyState())
-            KeyBinding::onTick(k);
-        dispatchKeypresses();
+    if (currentScreen != nullptr)
+        leftClickCounter = 10000;
+
+    if (const std::shared_ptr<GuiScreen> screen = currentScreen) {
+        screen->handleInput();
+        if (const std::shared_ptr<GuiScreen> after = currentScreen)
+            after->updateScreen();
+    }
+
+    if (currentScreen == nullptr || currentScreen->allowUserInput) {
+        while (Mouse::next()) {
+            const int i = Mouse::getEventButton();
+            KeyBinding::setKeyBindState(i - 100, Mouse::getEventButtonState());
+            if (Mouse::getEventButtonState())
+                KeyBinding::onTick(i - 100);
+            // Java: hotbar scrolling and spectator menu (stage 8)
+            if (currentScreen == nullptr) {
+                if (!inGameHasFocus && Mouse::getEventButtonState())
+                    setIngameFocus();
+            } else {
+                currentScreen->handleMouseInput();
+            }
+        }
+
+        if (leftClickCounter > 0)
+            --leftClickCounter;
+
+        while (Keyboard::next()) {
+            const int k = Keyboard::getEventKey() == 0 ? Keyboard::getEventCharacter() + 256 : Keyboard::getEventKey();
+            KeyBinding::setKeyBindState(k, Keyboard::getEventKeyState());
+            if (Keyboard::getEventKeyState())
+                KeyBinding::onTick(k);
+            // Java: F3 debug combinations and the crash key (stage 8)
+            dispatchKeypresses();
+            if (Keyboard::getEventKeyState()) {
+                if (currentScreen != nullptr)
+                    currentScreen->handleKeyboardInput();
+                // Java: in-game keys (pause, F1, F3, F5...) (stage 8)
+            }
+        }
+        // Java: key bindings for the player (stage 8)
+    }
+
+    if (!isGamePaused) {
+        // Java: mcMusicTicker.update() (stage 3)
+        mcSoundHandler->update();
+    }
+    // Java: world ticking (stage 9)
+}
+
+void Minecraft::displayGuiScreen(std::shared_ptr<GuiScreen> guiScreenIn)
+{
+    // Keep the old screen alive while its onGuiClosed runs (it may be the caller).
+    const std::shared_ptr<GuiScreen> previous = currentScreen;
+    if (previous)
+        previous->onGuiClosed();
+
+    if (guiScreenIn == nullptr && theWorld == nullptr)
+        guiScreenIn = std::make_shared<GuiMainMenu>();
+    // Java: GuiGameOver when the player is dead (stage 8)
+
+    if (dynamic_cast<GuiMainMenu*>(guiScreenIn.get())) {
+        gameSettings->showDebugInfo = false;
+        // Java: ingameGUI.getChatGUI().clearChatMessages() (stage 8)
+    }
+
+    currentScreen = guiScreenIn;
+
+    if (guiScreenIn != nullptr) {
+        setIngameNotInFocus();
+        const ScaledResolution scaledresolution(*this);
+        guiScreenIn->setWorldAndResolution(*this, scaledresolution.getScaledWidth(), scaledresolution.getScaledHeight());
+        skipRenderWorld = false;
+    } else {
+        mcSoundHandler->resumeSounds();
+        setIngameFocus();
     }
 }
 
-void Minecraft::debugInputTick()
+void Minecraft::setIngameFocus()
 {
-    while (Mouse::next()) {
-        const int button = Mouse::getEventButton();
-        if (button >= 0) {
-            Log::info("[input test] mouse button {} {} at ({}, {})", button,
-                Mouse::getEventButtonState() ? "pressed" : "released", Mouse::getEventX(), Mouse::getEventY());
-            if (button == 0 && Mouse::getEventButtonState() && !Mouse::isGrabbed()) {
-                Mouse::setGrabbed(true);
-                Log::info("[input test] mouse grabbed, Escape releases it");
-            }
-        } else if (Mouse::getEventDWheel() != 0) {
-            Log::info("[input test] mouse wheel {}", Mouse::getEventDWheel());
-        }
+    if (Display::isActive() && !inGameHasFocus) {
+        inGameHasFocus = true;
+        mouseHelper.grabMouseCursor();
+        displayGuiScreen(nullptr);
+        leftClickCounter = 10000;
     }
+}
 
-    if (Mouse::isGrabbed()) {
-        debugMouseDX += Mouse::getDX();
-        debugMouseDY += Mouse::getDY();
+void Minecraft::setIngameNotInFocus()
+{
+    if (inGameHasFocus) {
+        KeyBinding::unPressAllKeys();
+        inGameHasFocus = false;
+        mouseHelper.ungrabMouseCursor();
     }
-    // Key events are logged from dispatchKeypresses(), which sees every one of them.
+}
+
+void Minecraft::displayInGameMenu()
+{
+    if (currentScreen == nullptr) {
+        // Java: displayGuiScreen(new GuiIngameMenu()) and pauses the integrated server (stage 8)
+    }
 }
 
 void Minecraft::dispatchKeypresses()
 {
     const int i = Keyboard::getEventKey() == 0 ? Keyboard::getEventCharacter() : Keyboard::getEventKey();
 
-    // Stage 1 input check: log every key event in LWJGL codes.
-    if (Keyboard::getEventKeyState()) {
-        const char16_t character = Keyboard::getEventCharacter();
-        Log::info("[input test] key {} ({}){}{}", Keyboard::getKeyName(Keyboard::getEventKey()), Keyboard::getEventKey(),
-            character >= 32 ? std::format(" char '{}'", toUtf8(std::wstring(1, static_cast<wchar_t>(character)))) : std::string(),
-            Keyboard::isRepeatEvent() ? " (repeat)" : "");
-        if (Keyboard::getEventKey() == Keyboard::KEY_ESCAPE && Mouse::isGrabbed()) {
-            Mouse::setGrabbed(false);
-            Log::info("[input test] mouse released");
-        }
-    }
-
     if (i != 0 && !Keyboard::isRepeatEvent()) {
+        // Java: GuiControls swallows the key for 20 ms after a rebind (stage 3).
         if (Keyboard::getEventKeyState()) {
             if (i == gameSettings->keyBindFullscreen.getKeyCode()) {
                 toggleFullscreen();
@@ -460,14 +548,18 @@ void Minecraft::toggleFullscreen()
     }
 
     Display::setVSyncEnabled(gameSettings->enableVsync);
-    Log::info("Fullscreen {} ({}x{})", fullscreen ? "on" : "off", displayWidth, displayHeight);
 }
 
 void Minecraft::resize(int width, int height)
 {
     displayWidth = std::max(1, width);
     displayHeight = std::max(1, height);
-    // Java: currentScreen->onResize(ScaledResolution), new LoadingScreenRenderer (stage 2).
+
+    if (const std::shared_ptr<GuiScreen> screen = currentScreen) {
+        const ScaledResolution scaledresolution(*this);
+        screen->onResize(*this, scaledresolution.getScaledWidth(), scaledresolution.getScaledHeight());
+    }
+    // Java: loadingScreen = new LoadingScreenRenderer(this) (stage 5)
     updateFramebufferSize();
 }
 
@@ -475,82 +567,6 @@ void Minecraft::updateFramebufferSize()
 {
     framebufferMc->createBindFramebuffer(displayWidth, displayHeight);
     // Java: entityRenderer.updateShaderGroupSize(displayWidth, displayHeight) (stage 15).
-}
-
-void Minecraft::renderStage2Preview()
-{
-    // Temporary: exercises the render core (textures, blending, alpha test, matrices, gradients) the way the
-    // GUI will. Replaced by the real screen rendering in stage 2.4/2.5.
-    const ScaledResolution scaledresolution(*this);
-    const int width = scaledresolution.getScaledWidth();
-    const int height = scaledresolution.getScaledHeight();
-
-    // EntityRenderer.setupOverlayRendering
-    DxStateManager::clear(256);
-    DxStateManager::matrixMode(5889);
-    DxStateManager::loadIdentity();
-    DxStateManager::ortho(0.0, scaledresolution.getScaledWidth_double(), scaledresolution.getScaledHeight_double(), 0.0, 1000.0, 3000.0);
-    DxStateManager::matrixMode(5888);
-    DxStateManager::loadIdentity();
-    DxStateManager::translate(0.0f, 0.0f, -2000.0f);
-
-    // GuiScreen.drawBackground(0)
-    Tessellator& tessellator = Tessellator::getInstance();
-    WorldRenderer& worldrenderer = tessellator.getWorldRenderer();
-    DxStateManager::disableLighting();
-    DxStateManager::disableFog();
-    renderEngine->bindTexture(ResourceLocation("textures/gui/options_background.png"));
-    DxStateManager::color(1.0f, 1.0f, 1.0f, 1.0f);
-    const float f = 32.0f;
-    worldrenderer.begin(7, DefaultVertexFormats::POSITION_TEX_COLOR);
-    worldrenderer.pos(0.0, height, 0.0).tex(0.0, static_cast<float>(height) / f).color(64, 64, 64, 255).endVertex();
-    worldrenderer.pos(width, height, 0.0).tex(static_cast<float>(width) / f, static_cast<float>(height) / f).color(64, 64, 64, 255).endVertex();
-    worldrenderer.pos(width, 0.0, 0.0).tex(static_cast<float>(width) / f, 0.0).color(64, 64, 64, 255).endVertex();
-    worldrenderer.pos(0.0, 0.0, 0.0).tex(0.0, 0.0).color(64, 64, 64, 255).endVertex();
-    tessellator.draw();
-
-    // Gui.drawGradientRect: translucent top-to-bottom gradient band
-    DxStateManager::disableTexture2D();
-    DxStateManager::enableBlend();
-    DxStateManager::disableAlpha();
-    DxStateManager::tryBlendFuncSeparate(770, 771, 1, 0);
-    DxStateManager::shadeModel(7425);
-    worldrenderer.begin(7, DefaultVertexFormats::POSITION_COLOR);
-    worldrenderer.pos(width, 10.0, 0.0).color(0x10, 0x10, 0x10, 0xC0).endVertex();
-    worldrenderer.pos(0.0, 10.0, 0.0).color(0x10, 0x10, 0x10, 0xC0).endVertex();
-    worldrenderer.pos(0.0, 40.0, 0.0).color(0x60, 0x20, 0xA0, 0x50).endVertex();
-    worldrenderer.pos(width, 40.0, 0.0).color(0x60, 0x20, 0xA0, 0x50).endVertex();
-    tessellator.draw();
-    DxStateManager::shadeModel(7424);
-    DxStateManager::enableAlpha();
-    DxStateManager::enableTexture2D();
-
-    // The Mojang logo, scaled down and spinning, blended over the background
-    renderEngine->bindTexture(mojangLogo ? *mojangLogo : ResourceLocation("textures/gui/title/mojang.png"));
-    DxStateManager::pushMatrix();
-    DxStateManager::translate(static_cast<float>(width) / 2.0f, static_cast<float>(height) / 2.0f + 20.0f, 0.0f);
-    DxStateManager::rotate(static_cast<float>(getSystemTime() % 7200) / 20.0f, 0.0f, 0.0f, 1.0f);
-    DxStateManager::scale(0.5f, 0.5f, 0.5f);
-    DxStateManager::color(1.0f, 1.0f, 1.0f, 0.75f);
-    draw(-128, -128, 0, 0, 256, 256, 255, 255, 255, 191);
-    DxStateManager::popMatrix();
-    DxStateManager::disableBlend();
-
-    // A button from widgets.png at its native 200x20 size: must be pixel-exact against the original
-    renderEngine->bindTexture(ResourceLocation("textures/gui/widgets.png"));
-    DxStateManager::color(1.0f, 1.0f, 1.0f, 1.0f);
-    draw(width / 2 - 100, height - 30, 0, 66, 200, 20, 255, 255, 255, 255);
-
-    // Text: translations, shadows, formatting codes, the unicode pages
-    FontRenderer& font = *fontRendererObj;
-    const std::string label = I18n::format("menu.singleplayer");
-    font.drawStringWithShadow(label, static_cast<float>(width / 2 - font.getStringWidth(label) / 2), static_cast<float>(height - 30 + 6), 14737632);
-    font.drawStringWithShadow("Minecraft 1.8.9", 2.0f, static_cast<float>(height - 10), -1);
-    const std::string copyright = "Copyright Mojang AB. Do not distribute!";
-    font.drawStringWithShadow(copyright, static_cast<float>(width - font.getStringWidth(copyright) - 2), static_cast<float>(height - 10), -1);
-    font.drawStringWithShadow("§cRed §aGreen §lBold§r §oItalic§r §nUnder§r §mStrike§r §kMagic", 2.0f, 46.0f, -1);
-    font.drawString("Привет, мир! Àßç ░█ αβγ", 2, 58, 0xFFFFA0);
-    font.drawSplitString("drawSplitString wraps long lines at word boundaries and carries §bformatting§r across the break.", 2, 72, 150, 0xA0A0A0);
 }
 
 void Minecraft::shutdown()
@@ -561,11 +577,17 @@ void Minecraft::shutdown()
 void Minecraft::shutdownMinecraftApplet()
 {
     Log::info("Stopping!");
+    if (mcSoundHandler)
+        mcSoundHandler->unloadSounds();
+
     // GL objects go before the context, like the JVM releasing them before Display.destroy().
+    currentScreen.reset();
+    entityRenderer.reset();
     fontRendererObj.reset();
     standardGalacticFontRenderer.reset();
     renderEngine.reset();
     framebufferMc.reset();
+    mcSoundHandler.reset();
     mcResourceManager.reset();
     if (Display::isCreated())
         GL::shutdown();

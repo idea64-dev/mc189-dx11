@@ -1,11 +1,13 @@
 #pragma once
 
 // Original: net/minecraft/client/Minecraft.java
-// Ported so far: startup, the game loop, window resize, fullscreen toggle, frame limiting and the debug FPS
-// counter. Everything else (resources, GUI, world, sound, network) arrives in later ROADMAP stages.
+// Ported so far: startup, resources, languages, settings, sound, fonts, the GUI screen flow, the game loop,
+// resizing, fullscreen, screenshots and frame limiting. World, player, networking and the integrated server
+// arrive in later ROADMAP stages; their call sites are noted inline.
 
 #include "client/main/GameConfiguration.h"
 #include "client/settings/GameSettings.h"
+#include "util/MouseHelper.h"
 #include "util/ResourceLocation.h"
 #include "util/Timer.h"
 
@@ -19,13 +21,15 @@
 namespace mc {
 
 class DefaultResourcePack;
+class EntityRenderer;
 class FontRenderer;
 class Framebuffer;
-class IResourceManager;
 class GuiScreen;
+class IResourceManager;
 class IResourcePack;
 class LanguageManager;
 class SimpleReloadableResourceManager;
+class SoundHandler;
 class TextureManager;
 class WorldClient;
 
@@ -41,6 +45,11 @@ public:
     // Called when the window is closed or the game is quit; the loop exits after the current frame.
     void shutdown();
 
+    // Shows a screen; null shows the main menu when no world is loaded.
+    void displayGuiScreen(std::shared_ptr<GuiScreen> guiScreenIn);
+    void setIngameFocus();
+    void setIngameNotInFocus();
+    void displayInGameMenu();
     void toggleFullscreen();
     void dispatchKeypresses();
 
@@ -56,6 +65,7 @@ public:
     TextureManager& getTextureManager() { return *renderEngine; }
     Framebuffer& getFramebuffer() { return *framebufferMc; }
     LanguageManager& getLanguageManager() { return *mcLanguageManager; }
+    SoundHandler& getSoundHandler() { return *mcSoundHandler; }
     const IResourceManager& getResourceManager() const;
     bool isUnicode() const;
     bool isFullScreen() const { return fullscreen; }
@@ -70,13 +80,15 @@ public:
     std::unique_ptr<GameSettings> gameSettings;
     // Debug line shown on F3, e.g. "120 fps (0 chunk updates) T: 120 vsync".
     std::string debug;
-
     std::unique_ptr<FontRenderer> fontRendererObj;
     std::unique_ptr<FontRenderer> standardGalacticFontRenderer;
+    std::shared_ptr<GuiScreen> currentScreen;
+    MouseHelper mouseHelper;
+    bool inGameHasFocus = false;
+    bool skipRenderWorld = false;
 
     // Not ported yet; kept so the ported logic reads like the original.
     WorldClient* theWorld = nullptr;
-    GuiScreen* currentScreen = nullptr;
 
 private:
     void startGame();
@@ -93,11 +105,6 @@ private:
     void shutdownMinecraftApplet();
     void displayCrashReport(const std::string& description, const std::exception& cause);
 
-    // Temporary input check for ROADMAP stage 1, removed once GuiScreen handles input.
-    void debugInputTick();
-    // Temporary stand-in for EntityRenderer.updateCameraAndRender until GuiMainMenu is ported (stage 2.5).
-    void renderStage2Preview();
-
     static Minecraft* theMinecraft;
     static int debugFPS;
 
@@ -112,16 +119,16 @@ private:
     std::unique_ptr<SimpleReloadableResourceManager> mcResourceManager;
     std::unique_ptr<LanguageManager> mcLanguageManager;
     std::unique_ptr<TextureManager> renderEngine;
+    std::unique_ptr<SoundHandler> mcSoundHandler;
+    std::unique_ptr<EntityRenderer> entityRenderer;
     std::unique_ptr<Framebuffer> framebufferMc;
     std::optional<ResourceLocation> mojangLogo;
     volatile bool running = true;
     bool isGamePaused = false;
+    int leftClickCounter = 0;
     int fpsCounter = 0;
     int64_t debugUpdateTime;
     int64_t startNanoTime;
-
-    int debugMouseDX = 0;
-    int debugMouseDY = 0;
 };
 
 } // namespace mc

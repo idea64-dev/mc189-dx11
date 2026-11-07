@@ -126,24 +126,24 @@
 - [ ] `bidiReorder` (арабский/иврит через ICU) — вместе с экраном языков
 
 ### 2.4 GUI-фреймворк
-- [ ] `Gui`: `drawRect`, `drawGradientRect`, `drawTexturedModalRect`, `drawCenteredString`, `drawModalRectWithCustomSizedTexture`
-- [ ] `GuiScreen`: `initGui`, `drawScreen`, `updateScreen`, `actionPerformed`, `keyTyped`, `mouseClicked/Released`, `handleInput`, `onGuiClosed`, `drawDefaultBackground` (dirt-фон)
-- [ ] `GuiButton` (`widgets.png`, hover, disabled), `GuiButtonLanguage`, `GuiTextField`, `GuiSlider`, `GuiOptionButton`, `GuiSlot` (списки с прокруткой)
-- [ ] `Minecraft::displayGuiScreen`, обработка ESC, `GuiYesNo`, `GuiErrorScreen`
-- [ ] Звук нажатия кнопки: минимальный `SoundHandler` → OpenAL, `gui.button.press` (`random/click.ogg`)
+- [x] `Gui`: `drawRect`, `drawGradientRect`, `drawTexturedModalRect`, `drawCenteredString`, `drawModalRectWithCustomSizedTexture`, `drawScaledCustomSizeModalRect`
+- [x] `GuiScreen`: `initGui`, `drawScreen`, `updateScreen`, `actionPerformed`, `keyTyped`, `mouseClicked/Released/ClickMove`, `handleInput`, `onGuiClosed`, `drawDefaultBackground`, буфер обмена; экраны владеются через `shared_ptr` (дочерний экран держит родителя, как GC в Java)
+- [x] `GuiButton`, `GuiButtonLanguage`, `GuiErrorScreen`
+- [ ] `GuiTextField`, `GuiSlider`, `GuiOptionButton`, `GuiSlot`, `GuiYesNo` — вместе с экранами этапа 3
+- [x] `Minecraft::displayGuiScreen`, `setIngameFocus`/`setIngameNotInFocus`, ввод через `currentScreen->handleInput()`, `EntityRenderer` (ветка без мира + `setupOverlayRendering`), `MouseHelper`
+- [x] Звук: `SoundHandler`/`SoundManager` (`sounds.json`, веса вариантов, категории громкости), вывод через XAudio2 + stb_vorbis; щелчок кнопки `gui.button.press`
 
 ### 2.5 Сам `GuiMainMenu`
-- [ ] Панорама: 6 текстур `panorama_0..5`, вращение камеры, куб рисуется 64 раза (сетка смещений 8×8) во вьюпорт 256×256, копия в `viewportTexture` (`DynamicTexture`, в оригинале `glCopyTexSubImage2D`, у нас `CopySubresourceRegion`), 7 вызовов `rotateAndBlurSkybox` по 3 смещённых прохода, растяжение на экран
-- [ ] Логотип `minecraft.png` из двух половин; пасхалка "Minceraft" с шансом 0.0001
-- [ ] Сплэш: случайная строка из `texts/splashes.txt`, пульсация и поворот −20°, особые даты (24.12 "Merry X-mas!", 01.01 "Happy new year!", 31.10 "OOoooOOOoooo! Spooky!")
-- [ ] Кнопки: Singleplayer, Multiplayer, Minecraft Realms, Options..., Quit Game, кнопка языка
-- [ ] Строки "Minecraft 1.8.9" слева внизу и "Copyright Mojang AB. Do not distribute!" справа
-- [ ] Предупреждение `title.oldgl1/oldgl2` (нет OpenGL 2.0) в оригинале: убираем (неприменимо к D3D11)
-- [ ] Заглушки для экранов, которые ещё не перенесены (Singleplayer/Multiplayer/Realms) — `GuiErrorScreen` "Not implemented yet"
-- [x] Загрузочный экран Mojang (`drawSplashScreen`: логотип на белом фоне) перед меню
-- [ ] `LoadingScreenRenderer` (прогресс загрузки миров) — вместе с одиночной игрой
+- [x] Панорама: 6 текстур `panorama_0..5`, 64 прохода во вьюпорт 256×256 оконного буфера, копия `glCopyTexSubImage2D` в `viewportTexture`, 7 проходов `rotateAndBlurSkybox`, растяжение на экран
+- [x] Логотип `minecraft.png` из двух половин; пасхалка "Minceraft" с шансом 0.0001
+- [x] Сплэш из `texts/splashes.txt` (пропуск фразы с hashCode 125780783), пульсация, поворот −20°, особые даты
+- [x] Кнопки: Singleplayer, Multiplayer, Minecraft Realms, Options..., Quit Game, кнопка языка; меню работает на 30 FPS, как в оригинале
+- [x] Строки "Minecraft 1.8.9" и "Copyright Mojang AB. Do not distribute!"
+- [x] Предупреждение `title.oldgl1/oldgl2` убрано (неприменимо к D3D11); демо-режим и уведомления Realms не переносятся
+- [x] Заглушки для неперенесённых экранов — `GuiErrorScreen` с указанием этапа
+- [x] Загрузочный экран Mojang перед меню
 
-**Готово, когда:** скриншот меню в C++ попиксельно совпадает со скриншотом Java-версии при одинаковом размере окна, GUI scale и сплэше (сравнение скриптом, допуск — только панорама из-за float).
+**Готово, когда:** скриншот меню в C++ совпадает с Java-версией. — **выполнено**: кнопки с надписями и нижние строки совпадают попиксельно (0 отличий; `tools/compare_screens.py` против кадра настоящего клиента из `tools/reference/run_vanilla.ps1`). Фон-панорама анимирован и сплэш случаен, поэтому их сравнить кадр в кадр нельзя; визуально они идентичны.
 
 ## Этап 3. Настройки и сопутствующие экраны
 

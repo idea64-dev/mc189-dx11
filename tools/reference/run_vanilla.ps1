@@ -45,7 +45,8 @@ $javaArgs = @(
     "--uuid", "00000000000000000000000000000000", "--accessToken", "0", "--userProperties", "{}", "--userType", "legacy",
     "--width", "$Width", "--height", "$Height"
 )
-$proc = Start-Process java -ArgumentList $javaArgs -PassThru
+# log4j writes logs/ relative to the working directory
+$proc = Start-Process java -ArgumentList $javaArgs -WorkingDirectory $GameDir -PassThru
 try {
     Start-Sleep -Seconds $WaitSeconds
     $proc.Refresh()

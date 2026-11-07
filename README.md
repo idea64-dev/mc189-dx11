@@ -54,6 +54,10 @@ powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: з
 `tests\reference\JavaReference.inc` и `src\util\MathHelperTables.inc`. Тесты сверяют C++ с ними побитово.
 Тесты ресурсов используют установленный Minecraft и пропускаются, если его нет.
 
+Сравнение с оригиналом по кадрам: `tools/reference/run_vanilla.ps1 -Output run/vanilla_menu.png` запускает
+настоящий клиент 1.8.9 из установки (Java 8, офлайн, отдельная папка `run_vanilla/`) и сохраняет снимок по F2;
+`python tools/compare_screens.py run/vanilla_menu.png run/smoke_1_start.png` сравнивает его с кадром порта.
+
 ## Структура
 
 ```

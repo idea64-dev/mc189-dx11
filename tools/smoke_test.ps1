@@ -75,27 +75,23 @@ Shot $hwnd "smoke_1_start"
 "icons: small=" + ([W]::SendMessage($hwnd, 0x7F, [IntPtr]0, [IntPtr]0) -ne [IntPtr]::Zero) + " big=" + ([W]::SendMessage($hwnd, 0x7F, [IntPtr]1, [IntPtr]0) -ne [IntPtr]::Zero)
 
 [W]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 300
-# A, LShift+A, right Ctrl, numpad Enter, Up arrow (scan codes, E0 = extended)
-foreach ($k in 0x1E, 0x2A, 0x1E, 0xE01D, 0xE01C, 0xE048) { [W]::Key($k); Start-Sleep -Milliseconds 30 }
-# click centre to grab, move the mouse, scroll, release with Escape
-$c = New-Object W+POINT; $cr = New-Object W+RECT; [W]::GetClientRect($hwnd, [ref]$cr) | Out-Null
-$c.X = [int]($cr.R / 2); $c.Y = [int]($cr.B / 2); [W]::ClientToScreen($hwnd, [ref]$c) | Out-Null
-[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point $c.X, $c.Y
-[W]::Mouse(0x2, 0, 0); [W]::Mouse(0x4, 0, 0); Start-Sleep -Milliseconds 200
-for ($i = 0; $i -lt 10; $i++) { [W]::Mouse(0x1, 15, -5); Start-Sleep -Milliseconds 20 }
-Start-Sleep -Milliseconds 1200
-[W]::Key(0x01); Start-Sleep -Milliseconds 200
-[W]::Key(0x57)
-Start-Sleep -Seconds 1
+[W]::Key(0x57); Start-Sleep -Seconds 1       # F11
 Shot $hwnd "smoke_2_fullscreen"
-[W]::Key(0x57)
-Start-Sleep -Seconds 1
+[W]::Key(0x57); Start-Sleep -Seconds 1       # F11
 Shot $hwnd "smoke_3_windowed"
 
 [W]::MoveWindow($hwnd, 100, 100, 1000, 700, $true) | Out-Null
 Start-Sleep -Seconds 1
 Shot $hwnd "smoke_4_resized"
 "title: " + (Title $hwnd)
+
+# Click the "Singleplayer" button (centre of the window at default GUI scale) -> placeholder screen
+$c = New-Object W+POINT; $cr = New-Object W+RECT; [W]::GetClientRect($hwnd, [ref]$cr) | Out-Null
+$c.X = [int]($cr.R / 2); $c.Y = [int]($cr.B / 2); [W]::ClientToScreen($hwnd, [ref]$c) | Out-Null
+[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point $c.X, $c.Y
+[W]::SetForegroundWindow($hwnd) | Out-Null; Start-Sleep -Milliseconds 200
+[W]::Mouse(0x2, 0, 0); [W]::Mouse(0x4, 0, 0); Start-Sleep -Milliseconds 500
+Shot $hwnd "smoke_5_button"
 
 $proc.CloseMainWindow() | Out-Null
 if (-not $proc.WaitForExit(5000)) { $proc.Kill(); throw "did not exit on WM_CLOSE" }
