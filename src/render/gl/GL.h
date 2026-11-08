@@ -9,7 +9,8 @@
 // viewport/scissor/copy/read coordinates and texture coordinates into rendered images match the original.
 // The window framebuffer is flipped upright once per frame when the swapchain is presented.
 //
-// Single-threaded: call only from the client thread.
+// Call only from the client thread. The emulation runs on a GL thread (GLImpl.h, GLThread.cpp): the calls are
+// recorded as commands and executed there in order; queries that need its state wait for it.
 
 #include "render/gl/GLConstants.h"
 #include "render/gl/Matrix4f.h"

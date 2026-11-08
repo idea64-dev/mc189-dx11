@@ -159,6 +159,14 @@ void RenderDevice::createDevice()
         tearingSupported ? ", tearing supported" : "");
 
 #ifdef MC_DEBUG
+    if (ComPtr<ID3D11InfoQueue> infoQueue; SUCCEEDED(device.As(&infoQueue))) {
+        // Unbound samplers sample as the default one; the fixed-function shader samples both units always.
+        D3D11_MESSAGE_ID hidden[] = { D3D11_MESSAGE_ID_DEVICE_DRAW_SAMPLER_NOT_SET };
+        D3D11_INFO_QUEUE_FILTER filter {};
+        filter.DenyList.NumIDs = static_cast<UINT>(std::size(hidden));
+        filter.DenyList.pIDList = hidden;
+        infoQueue->AddStorageFilterEntries(&filter);
+    }
     if (IsDebuggerPresent()) {
         ComPtr<ID3D11InfoQueue> infoQueue;
         if (SUCCEEDED(device.As(&infoQueue))) {
@@ -226,7 +234,9 @@ void RenderDevice::resize(int newWidth, int newHeight)
     newHeight = std::max(1, newHeight);
     if (newWidth == width && newHeight == height)
         return;
-    waitForRenderThread();
+    // Frames are submitted from another thread: the render thread stays idle while the lock is held.
+    std::unique_lock lock(renderMutex);
+    renderCondition.wait(lock, [this] { return !queuedFrame && !renderBusy; });
 
     width = newWidth;
     height = newHeight;
@@ -262,6 +272,14 @@ void RenderDevice::clear(float red, float green, float blue, float alpha)
 }
 
 void RenderDevice::present(bool vsync)
+{
+    if (presentHandler)
+        presentHandler(vsync);
+    else
+        submitFrame(vsync);
+}
+
+void RenderDevice::submitFrame(bool vsync)
 {
     Frame frame;
     if (prePresent)

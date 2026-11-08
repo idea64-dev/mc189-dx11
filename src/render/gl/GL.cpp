@@ -1,8 +1,7 @@
-#include "render/gl/GL.h"
+#include "render/gl/GLImpl.h"
 
 #include "core/Log.h"
 #include "core/WinError.h"
-#include "platform/Display.h"
 #include "render/RenderDevice.h"
 
 #include <FixedFunctionPS.h>
@@ -15,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -24,7 +24,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace mc::GL {
+namespace mc::GL::impl {
 
 namespace {
 
@@ -189,7 +189,9 @@ struct State {
     // thread (finishCommands).
     ComPtr<ID3D11DeviceContext> deferredContext;
     ID3D11DeviceContext* context = nullptr;
-    // Without driver command lists the runtime misapplies UpdateSubresource boxes on deferred contexts.
+    // UpdateSubresource1 (Direct3D 11.1) uploads texture regions correctly on deferred contexts; without it and
+    // without driver command lists the runtime misapplies the box to the source.
+    ComPtr<ID3D11DeviceContext1> context1;
     bool driverCommandLists = true;
 
     // Objects
@@ -310,7 +312,9 @@ struct State {
     Batch batch;
 
     int drawCalls = 0;
-    int drawCallsLastFrame = 0;
+    // The window size, from the client thread (setWindowSize).
+    int windowWidth = 1;
+    int windowHeight = 1;
     std::unordered_set<std::string> warnedOnce;
 };
 
@@ -319,6 +323,9 @@ State& state()
     static State instance;
     return instance;
 }
+
+// Read by the client thread (the debug screen).
+std::atomic<int> drawCallsPreviousFrame { 0 };
 
 void flushBatch();
 ComPtr<ID3D11CommandList> finishCommands();
@@ -400,8 +407,8 @@ void createRenderbufferStorage(Renderbuffer& renderbuffer, int width, int height
 void ensureWindowFramebuffer()
 {
     State& s = state();
-    const int width = std::max(1, Display::getWidth());
-    const int height = std::max(1, Display::getHeight());
+    const int width = std::max(1, s.windowWidth);
+    const int height = std::max(1, s.windowHeight);
     if (s.windowColor.texture && s.windowColor.width == width && s.windowColor.height == height)
         return;
     flushBatch();
@@ -879,6 +886,7 @@ void initialize(RenderDevice& device)
     s.d3d = device.getDevice();
     throwIfFailed(s.d3d->CreateDeferredContext(0, s.deferredContext.GetAddressOf()), "CreateDeferredContext");
     s.context = s.deferredContext.Get();
+    s.deferredContext.As(&s.context1);
     D3D11_FEATURE_DATA_THREADING threading {};
     if (SUCCEEDED(s.d3d->CheckFeatureSupport(D3D11_FEATURE_THREADING, &threading, sizeof(threading))))
         s.driverCommandLists = threading.DriverCommandLists == TRUE;
@@ -946,7 +954,7 @@ void initialize(RenderDevice& device)
         State& st = state();
         flushBatch();
         ensureWindowFramebuffer();
-        st.drawCallsLastFrame = st.drawCalls;
+        drawCallsPreviousFrame = st.drawCalls;
         st.drawCalls = 0;
         RenderJob job;
         job.commands = finishCommands();
@@ -1977,6 +1985,10 @@ void glTexSubImage2D(int /*target*/, int level, int x, int y, int width, int hei
     const D3D11_BOX box { static_cast<UINT>(x), static_cast<UINT>(y), 0, static_cast<UINT>(x + width), static_cast<UINT>(y + height), 1 };
     const UINT rowPitch = static_cast<UINT>(width) * 4u;
     const void* source = pixels;
+    if (s.context1) {
+        s.context1->UpdateSubresource1(texture->texture.Get(), static_cast<UINT>(level), &box, pixels, rowPitch, 0, 0);
+        return;
+    }
     if (!s.driverCommandLists) {
         // ID3D11DeviceContext::UpdateSubresource remarks: the emulated command lists offset the source by the
         // box; compensate.
@@ -2140,7 +2152,28 @@ std::vector<uint32_t> glReadPixels(int x, int y, int width, int height)
 
 int drawCallsLastFrame()
 {
-    return state().drawCallsLastFrame;
+    return drawCallsPreviousFrame.load();
 }
 
-} // namespace mc::GL
+void setWindowSize(int width, int height)
+{
+    State& s = state();
+    s.windowWidth = width;
+    s.windowHeight = height;
+}
+
+void setMatrices(const Matrix4f& modelView, const Matrix4f& projection, const Matrix4f& texture0, const Matrix4f& texture1)
+{
+    State& s = state();
+    s.modelView = modelView;
+    s.projection = projection;
+    s.units[0].matrix = texture0;
+    s.units[1].matrix = texture1;
+}
+
+void endFrame(bool vsync)
+{
+    state().device->submitFrame(vsync);
+}
+
+} // namespace mc::GL::impl

@@ -49,9 +49,13 @@ public:
     void bindBackBuffer();
     // Equivalent of Java GlStateManager.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT).
     void clear(float red, float green, float blue, float alpha);
+    // Ends the frame: the present handler when one is set (the GL emulation forwards it to its own thread),
+    // else submitFrame.
+    void present(bool vsync);
+    void setPresentHandler(std::function<void(bool)> handler) { presentHandler = std::move(handler); }
     // Hands the frame to the render thread (waiting while the previous one is still queued), which executes
     // the job of the pre-present callback and presents.
-    void present(bool vsync);
+    void submitFrame(bool vsync);
     // Records the end of a frame: the GL emulation finishes its command list and copies the window
     // framebuffer to the back buffer (the job's function, on the render thread).
     void setPrePresentCallback(std::function<RenderJob()> callback) { prePresent = std::move(callback); }
@@ -91,6 +95,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthView;
 
     std::function<RenderJob()> prePresent;
+    std::function<void(bool)> presentHandler;
 
     struct Frame {
         RenderJob job;
