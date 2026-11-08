@@ -24,6 +24,7 @@ import net.minecraft.util.Vec3;
  *
  *   tests/reference/NbtReference.inc   JsonToNBT literals -> toString(), hashCode() and the written bytes
  *   tests/reference/MathReference.inc  BlockPos, EnumFacing, Vec3 and AxisAlignedBB results for random inputs
+ *   tests/reference/blocks.txt         the block registry (net/minecraft/block/BlockDump.java)
  *
  * Run by generate_game.ps1. Everything is hex-encoded UTF-8 so any text survives the trip into C++.
  */
@@ -219,6 +220,10 @@ public class GenerateGameReference {
         }
         try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Paths.get(args[0], "MathReference.inc"), StandardCharsets.UTF_8))) {
             math(out);
+        }
+        net.minecraft.init.Bootstrap.register();
+        try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Paths.get(args[0], "blocks.txt"), StandardCharsets.UTF_8))) {
+            net.minecraft.block.BlockDump.dump(out);
         }
     }
 }
