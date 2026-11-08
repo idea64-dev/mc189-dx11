@@ -89,6 +89,22 @@ const float* currentTexCoord(int unit);
 // current values, as GL does for disabled client arrays).
 void drawVertices(int mode, std::span<const GLVertex> vertices);
 
+// --- Buffer objects (VertexBuffer and display lists of the original) ---
+// Filled once (bufferVertices) and drawn with the state current at drawBuffer, like glDrawArrays from a VBO
+// whose arrays carry every attribute.
+int glGenBuffers();
+void glDeleteBuffers(int buffer);
+void bufferVertices(int buffer, int mode, std::span<const GLVertex> vertices);
+void drawBuffer(int buffer);
+
+// Render chunks: GL_QUADS in DefaultVertexFormats.BLOCK (position 3 floats, colour 4 unsigned bytes, texture
+// 2 floats, lightmap 2 shorts), kept on the GPU as WorldRenderer wrote them. drawBlockBuffers draws many with
+// the current state, buffer i under modelViews[i]: one pipeline setup, then a draw call per buffer. The
+// normal is GL's current one (the format has none).
+inline constexpr uint32_t kBlockVertexSize = 28;
+void bufferBlockVertices(int buffer, std::span<const uint8_t> bytes, uint32_t vertexCount);
+void drawBlockBuffers(std::span<const int> buffers, std::span<const Matrix4f> modelViews);
+
 // --- Matrices ---
 void glMatrixMode(int mode);
 void glLoadIdentity();
@@ -104,6 +120,8 @@ void glRotatef(float angle, float x, float y, float z);
 void glOrtho(double left, double right, double bottom, double top, double zNear, double zFar);
 // GL_MODELVIEW_MATRIX / GL_PROJECTION_MATRIX, 16 floats column-major.
 void glGetFloatv(int pname, float* params);
+// GL_VIEWPORT only.
+void glGetIntegerv(int pname, int* params);
 const Matrix4f& currentMatrix(int mode);
 
 // --- Viewport, scissor, clear ---

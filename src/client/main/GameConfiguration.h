@@ -2,12 +2,18 @@
 
 // Original: net/minecraft/client/main/GameConfiguration.java (fields used so far)
 
+#include "util/Session.h"
+
 #include <filesystem>
 #include <string>
 
 namespace mc {
 
 struct GameConfiguration {
+    struct UserInformation {
+        Session session;
+    };
+
     struct DisplayInformation {
         int width = 854;
         int height = 480;
@@ -27,6 +33,7 @@ struct GameConfiguration {
         std::string version = "1.8.9";
     };
 
+    UserInformation userInfo;
     DisplayInformation displayInfo;
     FolderInformation folderInfo;
     GameInformation gameInfo;

@@ -12,6 +12,8 @@
 #include <shellapi.h>
 
 #include <charconv>
+#include <cstdlib>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,13 +37,17 @@ int parseInt(const std::string& text, int fallback)
     return value;
 }
 
-// Subset of the jopt-simple options in Main.java; the rest (session, proxy, server) come with later stages.
+// Subset of the jopt-simple options in Main.java; the rest (proxy, server, properties) come with later stages.
 mc::GameConfiguration parseArguments(const std::vector<std::string>& arguments, std::vector<std::string>& ignored)
 {
     mc::GameConfiguration config;
     std::filesystem::path gameDir = ".";
     std::filesystem::path assetsDir;
     std::filesystem::path resourcePackDir;
+    std::string username = "Player" + std::to_string(mc::Minecraft::getSystemTime() % 1000);
+    std::optional<std::string> uuid;
+    std::string accessToken;
+    std::string userType = "legacy";
 
     for (size_t i = 0; i < arguments.size(); ++i) {
         const std::string& argument = arguments[i];
@@ -65,11 +71,21 @@ mc::GameConfiguration parseArguments(const std::vector<std::string>& arguments, 
             config.folderInfo.assetIndex = arguments[++i];
         } else if (argument == "--version" && hasValue) {
             config.gameInfo.version = arguments[++i];
+        } else if (argument == "--username" && hasValue) {
+            username = arguments[++i];
+        } else if (argument == "--uuid" && hasValue) {
+            uuid = arguments[++i];
+        } else if (argument == "--accessToken" && hasValue) {
+            accessToken = arguments[++i];
+        } else if (argument == "--userType" && hasValue) {
+            userType = arguments[++i];
         } else {
             ignored.push_back(argument);
         }
     }
 
+    // Java: the player id defaults to the user name.
+    config.userInfo.session = mc::Session(username, uuid.value_or(username), accessToken, userType);
     config.folderInfo.mcDataDir = gameDir;
     config.folderInfo.assetsDir = assetsDir;
     config.folderInfo.resourcePacksDir = resourcePackDir.empty() ? gameDir / "resourcepacks" : resourcePackDir;
@@ -124,6 +140,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     mc::Log::init(config.folderInfo.mcDataDir / "logs");
     mc::Log::setThreadName("Client thread");
     mc::CrashHandler::install(config.folderInfo.mcDataDir / "crash-reports");
+    if (const char* trace = std::getenv("MC_HANG_TRACE"))
+        mc::CrashHandler::logThreadStackAfter(std::max(1, std::atoi(trace)));
+    if (const char* profile = std::getenv("MC_PROFILE"))
+        mc::CrashHandler::startSampler(std::max(1, std::atoi(profile)));
 
     if (!ignored.empty()) {
         std::string list;

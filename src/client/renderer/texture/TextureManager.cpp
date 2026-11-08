@@ -50,7 +50,7 @@ bool TextureManager::loadTexture(const ResourceLocation& textureLocation, std::s
     return loaded;
 }
 
-bool TextureManager::loadTickableTexture(const ResourceLocation& textureLocation, std::shared_ptr<ITextureObject> textureObj, ITickable* tickable)
+bool TextureManager::loadTickableTexture(const ResourceLocation& textureLocation, std::shared_ptr<ITextureObject> textureObj, ITickableTexture* tickable)
 {
     if (!loadTexture(textureLocation, std::move(textureObj)))
         return false;
@@ -60,7 +60,7 @@ bool TextureManager::loadTickableTexture(const ResourceLocation& textureLocation
 
 void TextureManager::tick()
 {
-    for (ITickable* tickable : listTickables)
+    for (ITickableTexture* tickable : listTickables)
         tickable->tick();
 }
 

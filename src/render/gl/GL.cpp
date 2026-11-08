@@ -6,8 +6,10 @@
 #include "render/RenderDevice.h"
 
 #include <FixedFunctionPS.h>
+#include <FixedFunctionGSWideLine.h>
 #include <FixedFunctionPSFlat.h>
 #include <FixedFunctionVS.h>
+#include <FixedFunctionVSChunk.h>
 #include <PresentPS.h>
 #include <PresentVS.h>
 
@@ -47,6 +49,9 @@ struct alignas(16) DrawConstants {
     float lightPosition[2][4];
     float lightDiffuse[2][4];
     float lightAmbient[2][4];
+    float lineParams[4];
+    int32_t fogRadial;
+    int32_t padding[3];
 };
 
 enum DrawFlags : int32_t {
@@ -57,6 +62,24 @@ enum DrawFlags : int32_t {
     FLAG_LIGHT1 = 0x10,
     FLAG_COLOR_MATERIAL = 0x20,
     FLAG_NORMALIZE = 0x40,
+    FLAG_FLAT = 0x80,
+};
+
+// A buffer object filled once and drawn many times (VertexBuffer / display lists of the original): the vertices
+// with GL's index order for the primitive mode, built for smooth and, on demand, flat shading.
+struct StaticBuffer {
+    ComPtr<ID3D11Buffer> vertices;
+    ComPtr<ID3D11Buffer> indices;
+    ComPtr<ID3D11Buffer> flatIndices;
+    UINT indexCount = 0;
+    UINT flatIndexCount = 0;
+    int mode = GL_QUADS;
+    D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    D3D11_PRIMITIVE_TOPOLOGY flatTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    uint32_t vertexCount = 0;
+    // Render chunk quads in the BLOCK format as WorldRenderer wrote them (bufferBlockVertices), drawn with the
+    // chunk shader and the shared quad indices.
+    bool blockFormat = false;
 };
 
 struct Texture {
@@ -126,15 +149,54 @@ struct RenderTarget {
     int height = 0;
 };
 
+// Everything a draw binds besides its input buffers, resolved from the GL state. Compared bytewise: zero it
+// before filling.
+struct Pipeline {
+    DrawConstants constants;
+    ID3D11RenderTargetView* rtv;
+    ID3D11DepthStencilView* dsv;
+    D3D11_VIEWPORT viewport;
+    D3D11_RECT scissor;
+    ID3D11RasterizerState* rasterizer;
+    ID3D11DepthStencilState* depth;
+    ID3D11BlendState* blend;
+    float blendFactor[4];
+    D3D11_PRIMITIVE_TOPOLOGY topology;
+    ID3D11GeometryShader* geometryShader;
+    ID3D11PixelShader* pixelShader;
+    ID3D11ShaderResourceView* views[kTextureUnits];
+    ID3D11SamplerState* samplers[kTextureUnits];
+};
+
+// Per-instance data of the chunk shader (ChunkVertexInput).
+struct ChunkInstance {
+    float modelView[16];
+    float normal[4];
+};
+
+// Immediate draws (fonts, GUI, the tessellator) with the same pipeline go to Direct3D as one draw.
+struct Batch {
+    bool active = false;
+    Pipeline pipeline;
+    std::vector<GLVertex> vertices;
+    std::vector<uint32_t> indices;
+};
+
 struct State {
     RenderDevice* device = nullptr;
     ID3D11Device* d3d = nullptr;
+    // Everything is recorded into a deferred context; RenderDevice executes the command lists on its render
+    // thread (finishCommands).
+    ComPtr<ID3D11DeviceContext> deferredContext;
     ID3D11DeviceContext* context = nullptr;
+    // Without driver command lists the runtime misapplies UpdateSubresource boxes on deferred contexts.
+    bool driverCommandLists = true;
 
     // Objects
     std::unordered_map<int, Texture> textures;
     std::unordered_map<int, Framebuffer> framebuffers;
     std::unordered_map<int, Renderbuffer> renderbuffers;
+    std::unordered_map<int, StaticBuffer> staticBuffers;
     int nextName = 1;
     Texture windowColor;
     Renderbuffer windowDepth;
@@ -175,6 +237,7 @@ struct State {
 
     // Fog and lighting
     int fogMode = GL_EXP;
+    bool fogRadial = false;
     float fogDensity = 1.0f;
     float fogStart = 0.0f;
     float fogEnd = 1.0f;
@@ -211,9 +274,17 @@ struct State {
     ComPtr<ID3D11VertexShader> vertexShader;
     ComPtr<ID3D11PixelShader> pixelShader;
     ComPtr<ID3D11PixelShader> pixelShaderFlat;
+    ComPtr<ID3D11GeometryShader> wideLineShader;
     ComPtr<ID3D11VertexShader> presentVertexShader;
     ComPtr<ID3D11PixelShader> presentPixelShader;
     ComPtr<ID3D11InputLayout> inputLayout;
+    ComPtr<ID3D11VertexShader> chunkVertexShader;
+    ComPtr<ID3D11InputLayout> chunkInputLayout;
+    // Indices of GL_QUADS as triangles for any chunk (BaseVertex 0): smooth and flat (provoking vertex first).
+    ComPtr<ID3D11Buffer> quadIndices;
+    ComPtr<ID3D11Buffer> flatQuadIndices;
+    uint32_t quadIndexCapacity = 0;
+    std::vector<ChunkInstance> chunkInstances;
     ComPtr<ID3D11Buffer> constantBuffer;
     ComPtr<ID3D11Buffer> vertexBuffer;
     ComPtr<ID3D11Buffer> indexBuffer;
@@ -230,6 +301,14 @@ struct State {
     ComPtr<ID3D11BlendState> presentBlend;
     std::vector<uint32_t> indices;
 
+    // What the context has bound (draws skip the calls that would not change it); invalid after the present
+    // pass, which binds its own.
+    Pipeline bound;
+    bool boundValid = false;
+    ID3D11VertexShader* boundVertexShader = nullptr;
+    ID3D11InputLayout* boundInputLayout = nullptr;
+    Batch batch;
+
     int drawCalls = 0;
     int drawCallsLastFrame = 0;
     std::unordered_set<std::string> warnedOnce;
@@ -240,6 +319,9 @@ State& state()
     static State instance;
     return instance;
 }
+
+void flushBatch();
+ComPtr<ID3D11CommandList> finishCommands();
 
 void warnOnce(const std::string& message)
 {
@@ -322,6 +404,7 @@ void ensureWindowFramebuffer()
     const int height = std::max(1, Display::getHeight());
     if (s.windowColor.texture && s.windowColor.width == width && s.windowColor.height == height)
         return;
+    flushBatch();
 
     createTextureStorage(s.windowColor, width, height, 1);
     createRenderbufferStorage(s.windowDepth, width, height);
@@ -704,11 +787,14 @@ void fillConstants(DrawConstants& c)
     std::memcpy(c.textureMatrix0, s.units[0].matrix.m.data(), sizeof(c.textureMatrix0));
     std::memcpy(c.textureMatrix1, s.units[1].matrix.m.data(), sizeof(c.textureMatrix1));
 
-    const auto normalMatrix = s.modelView.normalMatrix();
-    for (int row = 0; row < 3; ++row) {
-        for (int column = 0; column < 3; ++column)
-            c.normalMatrix[row][column] = normalMatrix[static_cast<size_t>(row * 3 + column)];
-        c.normalMatrix[row][3] = 0.0f;
+    // Only lighting reads it (left zero otherwise, so unlit draws compare equal).
+    if (s.lighting) {
+        const auto normalMatrix = s.modelView.normalMatrix();
+        for (int row = 0; row < 3; ++row) {
+            for (int column = 0; column < 3; ++column)
+                c.normalMatrix[row][column] = normalMatrix[static_cast<size_t>(row * 3 + column)];
+            c.normalMatrix[row][3] = 0.0f;
+        }
     }
 
     std::memcpy(c.fogColor, s.fogColor, sizeof(c.fogColor));
@@ -735,6 +821,8 @@ void fillConstants(DrawConstants& c)
         flags |= FLAG_COLOR_MATERIAL;
     if (s.normalize || s.rescaleNormal)
         flags |= FLAG_NORMALIZE;
+    if (s.shadeModel == GL_FLAT)
+        flags |= FLAG_FLAT;
     c.flags = flags;
 
     std::memcpy(c.lightModelAmbient, s.lightModelAmbient, sizeof(c.lightModelAmbient));
@@ -743,6 +831,11 @@ void fillConstants(DrawConstants& c)
         std::memcpy(c.lightDiffuse[i], s.lights[i].diffuse, sizeof(c.lightDiffuse[i]));
         std::memcpy(c.lightAmbient[i], s.lights[i].ambient, sizeof(c.lightAmbient[i]));
     }
+    c.lineParams[0] = s.lineWidth;
+    c.lineParams[1] = static_cast<float>(std::max(1, s.viewport[2]));
+    c.lineParams[2] = static_cast<float>(std::max(1, s.viewport[3]));
+    c.lineParams[3] = 0.0f;
+    c.fogRadial = s.fogRadial ? 1 : 0;
 }
 
 void setCapability(int capability, bool enabled)
@@ -784,11 +877,16 @@ void initialize(RenderDevice& device)
     State& s = state();
     s.device = &device;
     s.d3d = device.getDevice();
-    s.context = device.getContext();
+    throwIfFailed(s.d3d->CreateDeferredContext(0, s.deferredContext.GetAddressOf()), "CreateDeferredContext");
+    s.context = s.deferredContext.Get();
+    D3D11_FEATURE_DATA_THREADING threading {};
+    if (SUCCEEDED(s.d3d->CheckFeatureSupport(D3D11_FEATURE_THREADING, &threading, sizeof(threading))))
+        s.driverCommandLists = threading.DriverCommandLists == TRUE;
 
     throwIfFailed(s.d3d->CreateVertexShader(g_FixedFunctionVS, sizeof(g_FixedFunctionVS), nullptr, s.vertexShader.GetAddressOf()), "CreateVertexShader");
     throwIfFailed(s.d3d->CreatePixelShader(g_FixedFunctionPS, sizeof(g_FixedFunctionPS), nullptr, s.pixelShader.GetAddressOf()), "CreatePixelShader");
     throwIfFailed(s.d3d->CreatePixelShader(g_FixedFunctionPSFlat, sizeof(g_FixedFunctionPSFlat), nullptr, s.pixelShaderFlat.GetAddressOf()), "CreatePixelShader(flat)");
+    throwIfFailed(s.d3d->CreateGeometryShader(g_FixedFunctionGSWideLine, sizeof(g_FixedFunctionGSWideLine), nullptr, s.wideLineShader.GetAddressOf()), "CreateGeometryShader(wide lines)");
     throwIfFailed(s.d3d->CreateVertexShader(g_PresentVS, sizeof(g_PresentVS), nullptr, s.presentVertexShader.GetAddressOf()), "CreateVertexShader(present)");
     throwIfFailed(s.d3d->CreatePixelShader(g_PresentPS, sizeof(g_PresentPS), nullptr, s.presentPixelShader.GetAddressOf()), "CreatePixelShader(present)");
 
@@ -800,6 +898,24 @@ void initialize(RenderDevice& device)
         { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(GLVertex, nx), D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
     throwIfFailed(s.d3d->CreateInputLayout(layout, static_cast<UINT>(std::size(layout)), g_FixedFunctionVS, sizeof(g_FixedFunctionVS), s.inputLayout.GetAddressOf()), "CreateInputLayout");
+
+    // DefaultVertexFormats.BLOCK: POSITION_3F, COLOR_4UB, TEX_2F, TEX_2S (28 bytes); per instance the chunk's
+    // modelview columns and the normal.
+    throwIfFailed(s.d3d->CreateVertexShader(g_FixedFunctionVSChunk, sizeof(g_FixedFunctionVSChunk), nullptr, s.chunkVertexShader.GetAddressOf()), "CreateVertexShader(chunk)");
+    const D3D11_INPUT_ELEMENT_DESC chunkLayout[] = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 1, DXGI_FORMAT_R16G16_SINT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "MODELVIEW", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+        { "MODELVIEW", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+        { "MODELVIEW", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+        { "MODELVIEW", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+        { "NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 64, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+    };
+    throwIfFailed(s.d3d->CreateInputLayout(chunkLayout, static_cast<UINT>(std::size(chunkLayout)), g_FixedFunctionVSChunk, sizeof(g_FixedFunctionVSChunk),
+                      s.chunkInputLayout.GetAddressOf()),
+        "CreateInputLayout(chunk)");
 
     D3D11_BUFFER_DESC cbDesc {};
     cbDesc.ByteWidth = sizeof(DrawConstants);
@@ -828,28 +944,38 @@ void initialize(RenderDevice& device)
 
     device.setPrePresentCallback([] {
         State& st = state();
+        flushBatch();
         ensureWindowFramebuffer();
-        ID3D11RenderTargetView* backBuffer = st.device->getBackBufferView();
-        st.context->OMSetRenderTargets(1, &backBuffer, nullptr);
-        D3D11_VIEWPORT viewport {};
-        viewport.Width = static_cast<float>(st.device->getWidth());
-        viewport.Height = static_cast<float>(st.device->getHeight());
-        viewport.MaxDepth = 1.0f;
-        st.context->RSSetViewports(1, &viewport);
-        st.context->RSSetState(st.presentRasterizer.Get());
-        st.context->OMSetDepthStencilState(st.presentDepth.Get(), 0);
-        st.context->OMSetBlendState(st.presentBlend.Get(), nullptr, 0xFFFFFFFF);
-        st.context->IASetInputLayout(nullptr);
-        st.context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        st.context->VSSetShader(st.presentVertexShader.Get(), nullptr, 0);
-        st.context->PSSetShader(st.presentPixelShader.Get(), nullptr, 0);
-        ID3D11ShaderResourceView* source = st.windowColor.srv.Get();
-        st.context->PSSetShaderResources(0, 1, &source);
-        st.context->Draw(3, 0);
-        ID3D11ShaderResourceView* none[2] = {};
-        st.context->PSSetShaderResources(0, 2, none);
         st.drawCallsLastFrame = st.drawCalls;
         st.drawCalls = 0;
+        RenderJob job;
+        job.commands = finishCommands();
+        // Copied to the back buffer on the render thread, which owns it; the reference keeps the window
+        // framebuffer alive through a resize meanwhile.
+        job.after = [source = st.windowColor.srv](ID3D11DeviceContext* ctx) {
+            const State& rs = state();
+            ID3D11RenderTargetView* backBuffer = rs.device->getBackBufferView();
+            ctx->OMSetRenderTargets(1, &backBuffer, nullptr);
+            D3D11_VIEWPORT viewport {};
+            viewport.Width = static_cast<float>(rs.device->getWidth());
+            viewport.Height = static_cast<float>(rs.device->getHeight());
+            viewport.MaxDepth = 1.0f;
+            ctx->RSSetViewports(1, &viewport);
+            ctx->RSSetState(rs.presentRasterizer.Get());
+            ctx->OMSetDepthStencilState(rs.presentDepth.Get(), 0);
+            ctx->OMSetBlendState(rs.presentBlend.Get(), nullptr, 0xFFFFFFFF);
+            ctx->IASetInputLayout(nullptr);
+            ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            ctx->VSSetShader(rs.presentVertexShader.Get(), nullptr, 0);
+            ctx->GSSetShader(nullptr, nullptr, 0);
+            ctx->PSSetShader(rs.presentPixelShader.Get(), nullptr, 0);
+            ID3D11ShaderResourceView* view = source.Get();
+            ctx->PSSetShaderResources(0, 1, &view);
+            ctx->Draw(3, 0);
+            ID3D11ShaderResourceView* none[2] = {};
+            ctx->PSSetShaderResources(0, 2, none);
+        };
+        return job;
     });
 
     Log::info("OpenGL 1.x emulation on Direct3D 11 initialized ({}x{})", s.windowColor.width, s.windowColor.height);
@@ -882,8 +1008,10 @@ std::string glGetString(int name)
 void shutdown()
 {
     State& s = state();
-    if (s.device)
+    if (s.device) {
+        s.device->waitForRenderThread();
         s.device->setPrePresentCallback(nullptr);
+    }
     s = State {};
 }
 
@@ -1043,9 +1171,8 @@ void glShadeModel(int mode)
 
 void glLineWidth(float width)
 {
-    state().lineWidth = width;
-    if (width != 1.0f)
-        warnOnce("line widths other than 1 are drawn 1 pixel wide");
+    // GL rounds non-antialiased widths to whole pixels, at least 1.
+    state().lineWidth = std::max(1.0f, std::round(width));
 }
 
 void glLogicOp(int opcode)
@@ -1059,6 +1186,8 @@ void glFogi(int pname, int param)
 {
     if (pname == GL_FOG_MODE)
         state().fogMode = param;
+    else if (pname == GL_FOG_DISTANCE_MODE_NV)
+        state().fogRadial = param == GL_EYE_RADIAL_NV;
     else
         glFogf(pname, static_cast<float>(param));
 }
@@ -1209,6 +1338,190 @@ void glEnd()
     s.immediate.clear();
 }
 
+namespace {
+
+// Resolves the pipeline of a draw with the current GL state. False when nothing is drawn.
+bool resolvePipeline(Pipeline& p, bool polygons, D3D11_PRIMITIVE_TOPOLOGY topology, bool logicOrReverse, const float* logicBlendFactor)
+{
+    State& s = state();
+    if (polygons && s.cullFace && s.cullMode == GL_FRONT_AND_BACK)
+        return false;
+
+    const RenderTarget target = currentTarget();
+    if (!target.rtv)
+        return false;
+
+    std::memset(&p, 0, sizeof(p));
+    fillConstants(p.constants);
+    p.rtv = target.rtv;
+    p.dsv = target.dsv;
+
+    // Rows of every target are GL window rows (bottom-up storage), so GL coordinates apply directly.
+    p.viewport.TopLeftX = static_cast<float>(s.viewport[0]);
+    p.viewport.TopLeftY = static_cast<float>(s.viewport[1]);
+    p.viewport.Width = static_cast<float>(s.viewport[2]);
+    p.viewport.Height = static_cast<float>(s.viewport[3]);
+    p.viewport.MinDepth = 0.0f;
+    p.viewport.MaxDepth = 1.0f;
+    if (s.scissorTest)
+        p.scissor = D3D11_RECT { s.scissor[0], s.scissor[1], s.scissor[0] + s.scissor[2], s.scissor[1] + s.scissor[3] };
+
+    p.rasterizer = rasterizerState(polygons);
+    p.depth = depthState();
+    if (logicOrReverse) {
+        p.blend = logicOrReverseBlendState();
+        std::memcpy(p.blendFactor, logicBlendFactor, sizeof(p.blendFactor));
+    } else {
+        p.blend = blendState();
+    }
+    p.topology = topology;
+
+    const bool wideLines = topology == D3D11_PRIMITIVE_TOPOLOGY_LINELIST && s.lineWidth > 1.0f;
+    p.geometryShader = wideLines ? s.wideLineShader.Get() : nullptr;
+    p.pixelShader = s.shadeModel == GL_FLAT ? s.pixelShaderFlat.Get() : s.pixelShader.Get();
+    for (int unit = 0; unit < kTextureUnits; ++unit) {
+        if (const Texture* texture = usableTexture(unit)) {
+            p.views[unit] = texture->srv.Get();
+            p.samplers[unit] = samplerState(*texture);
+        }
+    }
+    return true;
+}
+
+// Binds a resolved pipeline, skipping what the context already has.
+void applyPipeline(const Pipeline& p, ID3D11VertexShader* vertexShader, ID3D11InputLayout* inputLayout)
+{
+    State& s = state();
+    ID3D11DeviceContext* ctx = s.context;
+    Pipeline& b = s.bound;
+    const bool all = !s.boundValid;
+
+    if (all) {
+        ID3D11Buffer* cb = s.constantBuffer.Get();
+        ctx->VSSetConstantBuffers(0, 1, &cb);
+        ctx->GSSetConstantBuffers(0, 1, &cb);
+        ctx->PSSetConstantBuffers(0, 1, &cb);
+    }
+    if (all || std::memcmp(&p.constants, &b.constants, sizeof(p.constants)) != 0) {
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        throwIfFailed(ctx->Map(s.constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Map(constants)");
+        std::memcpy(mapped.pData, &p.constants, sizeof(p.constants));
+        ctx->Unmap(s.constantBuffer.Get(), 0);
+    }
+
+    // Binding a target unbinds its texture from the shader inputs: the views are set again after a change.
+    const bool targetChanged = all || p.rtv != b.rtv || p.dsv != b.dsv;
+    if (targetChanged) {
+        ID3D11RenderTargetView* rtv = p.rtv;
+        ctx->OMSetRenderTargets(1, &rtv, p.dsv);
+    }
+    if (all || std::memcmp(&p.viewport, &b.viewport, sizeof(p.viewport)) != 0)
+        ctx->RSSetViewports(1, &p.viewport);
+    if ((all || std::memcmp(&p.scissor, &b.scissor, sizeof(p.scissor)) != 0) && p.scissor.right > p.scissor.left)
+        ctx->RSSetScissorRects(1, &p.scissor);
+    if (all || p.rasterizer != b.rasterizer)
+        ctx->RSSetState(p.rasterizer);
+    if (all || p.depth != b.depth)
+        ctx->OMSetDepthStencilState(p.depth, 0);
+    if (all || p.blend != b.blend || std::memcmp(p.blendFactor, b.blendFactor, sizeof(p.blendFactor)) != 0)
+        ctx->OMSetBlendState(p.blend, p.blendFactor, 0xFFFFFFFF);
+    if (all || p.topology != b.topology)
+        ctx->IASetPrimitiveTopology(p.topology);
+    if (all || inputLayout != s.boundInputLayout)
+        ctx->IASetInputLayout(inputLayout);
+    if (all || vertexShader != s.boundVertexShader)
+        ctx->VSSetShader(vertexShader, nullptr, 0);
+    if (all || p.geometryShader != b.geometryShader)
+        ctx->GSSetShader(p.geometryShader, nullptr, 0);
+    if (all || p.pixelShader != b.pixelShader)
+        ctx->PSSetShader(p.pixelShader, nullptr, 0);
+    if (targetChanged || std::memcmp(p.views, b.views, sizeof(p.views)) != 0) {
+        ID3D11ShaderResourceView* views[kTextureUnits];
+        std::memcpy(views, p.views, sizeof(views));
+        ctx->PSSetShaderResources(0, kTextureUnits, views);
+    }
+    if (all || std::memcmp(p.samplers, b.samplers, sizeof(p.samplers)) != 0) {
+        ID3D11SamplerState* samplers[kTextureUnits];
+        std::memcpy(samplers, p.samplers, sizeof(samplers));
+        ctx->PSSetSamplers(0, kTextureUnits, samplers);
+    }
+
+    std::memcpy(&b, &p, sizeof(p));
+    s.boundVertexShader = vertexShader;
+    s.boundInputLayout = inputLayout;
+    s.boundValid = true;
+}
+
+void flushBatch()
+{
+    State& s = state();
+    Batch& batch = s.batch;
+    if (!batch.active)
+        return;
+    batch.active = false;
+
+    applyPipeline(batch.pipeline, s.vertexShader.Get(), s.inputLayout.Get());
+    const UINT vertexBytes = static_cast<UINT>(batch.vertices.size() * sizeof(GLVertex));
+    const UINT vertexOffset = appendToRingBuffer(s.vertexBuffer, s.vertexBufferSize, s.vertexBufferOffset, D3D11_BIND_VERTEX_BUFFER, batch.vertices.data(), vertexBytes);
+    const UINT indexBytes = static_cast<UINT>(batch.indices.size() * sizeof(uint32_t));
+    const UINT indexOffset = appendToRingBuffer(s.indexBuffer, s.indexBufferSize, s.indexBufferOffset, D3D11_BIND_INDEX_BUFFER, batch.indices.data(), indexBytes);
+
+    ID3D11DeviceContext* ctx = s.context;
+    ID3D11Buffer* vertexBuffer = s.vertexBuffer.Get();
+    const UINT stride = sizeof(GLVertex);
+    ctx->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &vertexOffset);
+    ctx->IASetIndexBuffer(s.indexBuffer.Get(), DXGI_FORMAT_R32_UINT, indexOffset);
+    ctx->DrawIndexed(static_cast<UINT>(batch.indices.size()), 0, 0);
+    ++s.drawCalls;
+    batch.vertices.clear();
+    batch.indices.clear();
+}
+
+// Ends the command list recorded so far. The deferred context starts the next one with default state, and the
+// first map of a dynamic buffer in a command list must discard it.
+ComPtr<ID3D11CommandList> finishCommands()
+{
+    State& s = state();
+    flushBatch();
+    ComPtr<ID3D11CommandList> commands;
+    throwIfFailed(s.context->FinishCommandList(FALSE, commands.GetAddressOf()), "FinishCommandList");
+    s.boundValid = false;
+    s.vertexBufferOffset = s.vertexBufferSize;
+    s.indexBufferOffset = s.indexBufferSize;
+    return commands;
+}
+
+ComPtr<ID3D11Buffer> createImmutableBuffer(UINT bindFlags, const void* data, UINT bytes)
+{
+    D3D11_BUFFER_DESC desc {};
+    desc.ByteWidth = bytes;
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags = bindFlags;
+    D3D11_SUBRESOURCE_DATA initial {};
+    initial.pSysMem = data;
+    ComPtr<ID3D11Buffer> buffer;
+    throwIfFailed(state().d3d->CreateBuffer(&desc, &initial, buffer.GetAddressOf()), "CreateBuffer(static)");
+    return buffer;
+}
+
+// Grows the shared GL_QUADS index buffers to at least `quads` quads.
+void ensureQuadIndices(uint32_t quads)
+{
+    State& s = state();
+    if (quads <= s.quadIndexCapacity)
+        return;
+    const uint32_t capacity = std::max({ quads, s.quadIndexCapacity * 2, 16384u });
+    std::vector<uint32_t> smooth;
+    std::vector<uint32_t> flat;
+    buildIndices(GL_QUADS, capacity * 4, false, smooth);
+    buildIndices(GL_QUADS, capacity * 4, true, flat);
+    s.quadIndices = createImmutableBuffer(D3D11_BIND_INDEX_BUFFER, smooth.data(), static_cast<UINT>(smooth.size() * sizeof(uint32_t)));
+    s.flatQuadIndices = createImmutableBuffer(D3D11_BIND_INDEX_BUFFER, flat.data(), static_cast<UINT>(flat.size() * sizeof(uint32_t)));
+    s.quadIndexCapacity = capacity;
+}
+
+} // namespace
+
 void drawVertices(int mode, std::span<const GLVertex> vertices)
 {
     State& s = state();
@@ -1230,79 +1543,167 @@ void drawVertices(int mode, std::span<const GLVertex> vertices)
     }
 
     const bool polygons = mode >= GL_TRIANGLES;
-    if (polygons && s.cullFace && s.cullMode == GL_FRONT_AND_BACK)
-        return;
-
-    const RenderTarget target = currentTarget();
-    if (!target.rtv)
-        return;
-
     const bool flat = s.shadeModel == GL_FLAT;
     const D3D11_PRIMITIVE_TOPOLOGY topology = buildIndices(mode, static_cast<uint32_t>(vertices.size()), flat, s.indices);
     if (topology == D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED || s.indices.empty())
         return;
+    Pipeline pipeline;
+    if (!resolvePipeline(pipeline, polygons, topology, logicOrReverse, logicBlendFactor))
+        return;
 
-    const UINT vertexBytes = static_cast<UINT>(vertices.size_bytes());
-    const UINT vertexOffset = appendToRingBuffer(s.vertexBuffer, s.vertexBufferSize, s.vertexBufferOffset, D3D11_BIND_VERTEX_BUFFER, vertices.data(), vertexBytes);
-    const UINT indexBytes = static_cast<UINT>(s.indices.size() * sizeof(uint32_t));
-    const UINT indexOffset = appendToRingBuffer(s.indexBuffer, s.indexBufferSize, s.indexBufferOffset, D3D11_BIND_INDEX_BUFFER, s.indices.data(), indexBytes);
+    // Appended to the pending draw when nothing it binds differs. The draws stay in order: everything else
+    // that reaches the context flushes first.
+    Batch& batch = s.batch;
+    if (batch.active && (batch.vertices.size() + vertices.size() > (1u << 18) || std::memcmp(&batch.pipeline, &pipeline, sizeof(pipeline)) != 0))
+        flushBatch();
+    if (!batch.active) {
+        std::memcpy(&batch.pipeline, &pipeline, sizeof(pipeline));
+        batch.active = true;
+    }
+    const auto base = static_cast<uint32_t>(batch.vertices.size());
+    batch.vertices.insert(batch.vertices.end(), vertices.begin(), vertices.end());
+    for (const uint32_t index : s.indices)
+        batch.indices.push_back(base + index);
+}
 
-    DrawConstants constants {};
-    fillConstants(constants);
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    throwIfFailed(s.context->Map(s.constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Map(constants)");
-    std::memcpy(mapped.pData, &constants, sizeof(constants));
-    s.context->Unmap(s.constantBuffer.Get(), 0);
+// --- Buffer objects ---
+
+int glGenBuffers()
+{
+    State& s = state();
+    const int name = s.nextName++;
+    s.staticBuffers[name];
+    return name;
+}
+
+void glDeleteBuffers(int buffer)
+{
+    state().staticBuffers.erase(buffer);
+}
+
+void bufferVertices(int buffer, int mode, std::span<const GLVertex> vertices)
+{
+    State& s = state();
+    const auto it = s.staticBuffers.find(buffer);
+    if (it == s.staticBuffers.end())
+        return;
+    StaticBuffer& b = it->second;
+    b = StaticBuffer {};
+    b.mode = mode;
+    b.vertexCount = static_cast<uint32_t>(vertices.size());
+    if (vertices.empty())
+        return;
+    std::vector<uint32_t> indices;
+    b.topology = buildIndices(mode, b.vertexCount, false, indices);
+    if (b.topology == D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED || indices.empty())
+        return;
+    b.vertices = createImmutableBuffer(D3D11_BIND_VERTEX_BUFFER, vertices.data(), static_cast<UINT>(vertices.size_bytes()));
+    b.indices = createImmutableBuffer(D3D11_BIND_INDEX_BUFFER, indices.data(), static_cast<UINT>(indices.size() * sizeof(uint32_t)));
+    b.indexCount = static_cast<UINT>(indices.size());
+}
+
+void bufferBlockVertices(int buffer, std::span<const uint8_t> bytes, uint32_t vertexCount)
+{
+    State& s = state();
+    const auto it = s.staticBuffers.find(buffer);
+    if (it == s.staticBuffers.end())
+        return;
+    StaticBuffer& b = it->second;
+    b = StaticBuffer {};
+    b.mode = GL_QUADS;
+    b.blockFormat = true;
+    b.vertexCount = vertexCount - vertexCount % 4;
+    if (b.vertexCount == 0 || bytes.size() < static_cast<size_t>(b.vertexCount) * kBlockVertexSize)
+        return;
+    b.vertices = createImmutableBuffer(D3D11_BIND_VERTEX_BUFFER, bytes.data(), b.vertexCount * kBlockVertexSize);
+}
+
+void drawBlockBuffers(std::span<const int> buffers, std::span<const Matrix4f> modelViews)
+{
+    State& s = state();
+    flushBatch();
+
+    std::vector<ChunkInstance>& instances = s.chunkInstances;
+    instances.clear();
+    std::vector<const StaticBuffer*> draws;
+    draws.reserve(buffers.size());
+    uint32_t maxVertices = 0;
+    for (size_t i = 0; i < buffers.size() && i < modelViews.size(); ++i) {
+        const auto it = s.staticBuffers.find(buffers[i]);
+        if (it == s.staticBuffers.end() || !it->second.blockFormat || !it->second.vertices)
+            continue;
+        draws.push_back(&it->second);
+        maxVertices = std::max(maxVertices, it->second.vertexCount);
+        ChunkInstance& instance = instances.emplace_back();
+        std::memcpy(instance.modelView, modelViews[i].m.data(), sizeof(instance.modelView));
+        instance.normal[0] = s.normal[0];
+        instance.normal[1] = s.normal[1];
+        instance.normal[2] = s.normal[2];
+        instance.normal[3] = 0.0f;
+    }
+    if (draws.empty())
+        return;
+
+    ensureQuadIndices(maxVertices / 4);
+    Pipeline pipeline;
+    if (!resolvePipeline(pipeline, true, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false, nullptr))
+        return;
+    applyPipeline(pipeline, s.chunkVertexShader.Get(), s.chunkInputLayout.Get());
 
     ID3D11DeviceContext* ctx = s.context;
-    ctx->OMSetRenderTargets(1, &target.rtv, target.dsv);
+    const UINT instanceOffset = appendToRingBuffer(s.vertexBuffer, s.vertexBufferSize, s.vertexBufferOffset, D3D11_BIND_VERTEX_BUFFER, instances.data(),
+        static_cast<UINT>(instances.size() * sizeof(ChunkInstance)));
+    ID3D11Buffer* instanceBuffer = s.vertexBuffer.Get();
+    const UINT instanceStride = sizeof(ChunkInstance);
+    ctx->IASetVertexBuffers(1, 1, &instanceBuffer, &instanceStride, &instanceOffset);
+    ctx->IASetIndexBuffer(s.shadeModel == GL_FLAT ? s.flatQuadIndices.Get() : s.quadIndices.Get(), DXGI_FORMAT_R32_UINT, 0);
 
-    // Rows of every target are GL window rows (bottom-up storage), so GL coordinates apply directly.
-    D3D11_VIEWPORT viewport {};
-    viewport.TopLeftX = static_cast<float>(s.viewport[0]);
-    viewport.TopLeftY = static_cast<float>(s.viewport[1]);
-    viewport.Width = static_cast<float>(s.viewport[2]);
-    viewport.Height = static_cast<float>(s.viewport[3]);
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-    ctx->RSSetViewports(1, &viewport);
-    if (s.scissorTest) {
-        const D3D11_RECT rect { s.scissor[0], s.scissor[1], s.scissor[0] + s.scissor[2], s.scissor[1] + s.scissor[3] };
-        ctx->RSSetScissorRects(1, &rect);
+    const UINT stride = kBlockVertexSize;
+    const UINT offset = 0;
+    for (size_t i = 0; i < draws.size(); ++i) {
+        ID3D11Buffer* vertexBuffer = draws[i]->vertices.Get();
+        ctx->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+        ctx->DrawIndexedInstanced(draws[i]->vertexCount / 4 * 6, 1, 0, 0, static_cast<UINT>(i));
+        ++s.drawCalls;
+    }
+}
+
+void drawBuffer(int buffer)
+{
+    State& s = state();
+    const auto it = s.staticBuffers.find(buffer);
+    if (it == s.staticBuffers.end() || !it->second.vertices)
+        return;
+    StaticBuffer& b = it->second;
+    if (b.blockFormat) {
+        drawBlockBuffers(std::span<const int>(&buffer, 1), std::span<const Matrix4f>(&s.modelView, 1));
+        return;
+    }
+    flushBatch();
+
+    const bool flat = s.shadeModel == GL_FLAT;
+    if (flat && !b.flatIndices) {
+        std::vector<uint32_t> indices;
+        b.flatTopology = buildIndices(b.mode, b.vertexCount, true, indices);
+        if (indices.empty())
+            return;
+        b.flatIndices = createImmutableBuffer(D3D11_BIND_INDEX_BUFFER, indices.data(), static_cast<UINT>(indices.size() * sizeof(uint32_t)));
+        b.flatIndexCount = static_cast<UINT>(indices.size());
     }
 
-    ctx->RSSetState(rasterizerState(polygons));
-    ctx->OMSetDepthStencilState(depthState(), 0);
-    if (logicOrReverse)
-        ctx->OMSetBlendState(logicOrReverseBlendState(), logicBlendFactor, 0xFFFFFFFF);
-    else
-        ctx->OMSetBlendState(blendState(), nullptr, 0xFFFFFFFF);
+    const D3D11_PRIMITIVE_TOPOLOGY topology = flat ? b.flatTopology : b.topology;
+    Pipeline pipeline;
+    if (!resolvePipeline(pipeline, b.mode >= GL_TRIANGLES, topology, false, nullptr))
+        return;
+    applyPipeline(pipeline, s.vertexShader.Get(), s.inputLayout.Get());
 
-    ctx->IASetInputLayout(s.inputLayout.Get());
-    ctx->IASetPrimitiveTopology(topology);
-    ID3D11Buffer* vertexBuffer = s.vertexBuffer.Get();
+    ID3D11DeviceContext* ctx = s.context;
+    ID3D11Buffer* vertexBuffer = b.vertices.Get();
     const UINT stride = sizeof(GLVertex);
-    ctx->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &vertexOffset);
-    ctx->IASetIndexBuffer(s.indexBuffer.Get(), DXGI_FORMAT_R32_UINT, indexOffset);
-
-    ctx->VSSetShader(s.vertexShader.Get(), nullptr, 0);
-    ctx->PSSetShader(flat ? s.pixelShaderFlat.Get() : s.pixelShader.Get(), nullptr, 0);
-    ID3D11Buffer* cb = s.constantBuffer.Get();
-    ctx->VSSetConstantBuffers(0, 1, &cb);
-    ctx->PSSetConstantBuffers(0, 1, &cb);
-
-    ID3D11ShaderResourceView* views[kTextureUnits] = {};
-    ID3D11SamplerState* samplers[kTextureUnits] = {};
-    for (int unit = 0; unit < kTextureUnits; ++unit) {
-        if (const Texture* texture = usableTexture(unit)) {
-            views[unit] = texture->srv.Get();
-            samplers[unit] = samplerState(*texture);
-        }
-    }
-    ctx->PSSetShaderResources(0, kTextureUnits, views);
-    ctx->PSSetSamplers(0, kTextureUnits, samplers);
-
-    ctx->DrawIndexed(static_cast<UINT>(s.indices.size()), 0, 0);
+    const UINT offset = 0;
+    ctx->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+    ctx->IASetIndexBuffer(flat ? b.flatIndices.Get() : b.indices.Get(), DXGI_FORMAT_R32_UINT, 0);
+    ctx->DrawIndexed(flat ? b.flatIndexCount : b.indexCount, 0, 0);
     ++s.drawCalls;
 }
 
@@ -1389,6 +1790,15 @@ void glGetFloatv(int pname, float* params)
         warnOnce("glGetFloatv(" + std::to_string(pname) + ") is not emulated");
 }
 
+void glGetIntegerv(int pname, int* params)
+{
+    State& s = state();
+    if (pname == GL_VIEWPORT)
+        std::memcpy(params, s.viewport, sizeof(int) * 4);
+    else
+        warnOnce("glGetIntegerv(" + std::to_string(pname) + ") is not emulated");
+}
+
 const Matrix4f& currentMatrix(int mode)
 {
     State& s = state();
@@ -1432,6 +1842,7 @@ void glClearDepth(double depth)
 void glClear(int mask)
 {
     State& s = state();
+    flushBatch();
     const RenderTarget target = currentTarget();
     if (s.scissorTest)
         warnOnce("glClear with the scissor test enabled clears the whole target");
@@ -1476,6 +1887,7 @@ int glGenTextures()
 void glDeleteTextures(int texture)
 {
     State& s = state();
+    flushBatch();
     s.textures.erase(texture);
     for (TextureUnit& unit : s.units) {
         if (unit.bound == texture)
@@ -1528,6 +1940,7 @@ void glTexEnvi(int /*target*/, int pname, int param)
 void glTexImage2D(int /*target*/, int level, int width, int height, const uint32_t* pixels)
 {
     State& s = state();
+    flushBatch();
     Texture* texture = boundTexture();
     if (!texture) {
         warnOnce("glTexImage2D without a bound texture");
@@ -1556,17 +1969,26 @@ void glTexImage2D(int /*target*/, int level, int width, int height, const uint32
 void glTexSubImage2D(int /*target*/, int level, int x, int y, int width, int height, const uint32_t* pixels)
 {
     State& s = state();
+    flushBatch();
     Texture* texture = boundTexture();
     if (!texture || !texture->texture || level >= texture->levels || width <= 0 || height <= 0)
         return;
 
     const D3D11_BOX box { static_cast<UINT>(x), static_cast<UINT>(y), 0, static_cast<UINT>(x + width), static_cast<UINT>(y + height), 1 };
-    s.context->UpdateSubresource(texture->texture.Get(), static_cast<UINT>(level), &box, pixels, static_cast<UINT>(width) * 4u, 0);
+    const UINT rowPitch = static_cast<UINT>(width) * 4u;
+    const void* source = pixels;
+    if (!s.driverCommandLists) {
+        // ID3D11DeviceContext::UpdateSubresource remarks: the emulated command lists offset the source by the
+        // box; compensate.
+        source = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(pixels) - (static_cast<uintptr_t>(box.top) * rowPitch + static_cast<uintptr_t>(box.left) * 4u));
+    }
+    s.context->UpdateSubresource(texture->texture.Get(), static_cast<UINT>(level), &box, source, rowPitch, 0);
 }
 
 void glCopyTexSubImage2D(int /*target*/, int level, int xOffset, int yOffset, int x, int y, int width, int height)
 {
     State& s = state();
+    flushBatch();
     Texture* destination = boundTexture();
     const RenderTarget source = currentTarget();
     if (!destination || !destination->texture || !source.color || level >= destination->levels)
@@ -1590,6 +2012,7 @@ namespace {
 std::vector<uint32_t> readTexture(ID3D11Texture2D* source, UINT subresource, int x, int y, int width, int height)
 {
     State& s = state();
+    flushBatch();
     std::vector<uint32_t> pixels;
     if (!source || width <= 0 || height <= 0)
         return pixels;
@@ -1607,14 +2030,21 @@ std::vector<uint32_t> readTexture(ID3D11Texture2D* source, UINT subresource, int
     throwIfFailed(s.d3d->CreateTexture2D(&desc, nullptr, staging.GetAddressOf()), "CreateTexture2D(staging)");
 
     const D3D11_BOX box { static_cast<UINT>(x), static_cast<UINT>(y), 0, static_cast<UINT>(x + width), static_cast<UINT>(y + height), 1 };
-    s.context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, source, subresource, &box);
 
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    throwIfFailed(s.context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map(staging)");
-    pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
-    for (int row = 0; row < height; ++row)
-        std::memcpy(&pixels[static_cast<size_t>(row) * static_cast<size_t>(width)], static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch, static_cast<size_t>(width) * 4);
-    s.context->Unmap(staging.Get(), 0);
+    // Reading needs the immediate context: everything recorded so far runs first, then the copy.
+    RenderJob job;
+    job.commands = finishCommands();
+    job.after = [&](ID3D11DeviceContext* ctx) {
+        ctx->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, source, subresource, &box);
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        throwIfFailed(ctx->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map(staging)");
+        pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
+        for (int row = 0; row < height; ++row)
+            std::memcpy(&pixels[static_cast<size_t>(row) * static_cast<size_t>(width)], static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch,
+                static_cast<size_t>(width) * 4);
+        ctx->Unmap(staging.Get(), 0);
+    };
+    s.device->runOnImmediateContext(job);
     return pixels;
 }
 
@@ -1653,6 +2083,7 @@ int glGenFramebuffers()
 void glDeleteFramebuffers(int framebuffer)
 {
     State& s = state();
+    flushBatch();
     s.framebuffers.erase(framebuffer);
     if (s.boundFramebuffer == framebuffer)
         s.boundFramebuffer = 0;
@@ -1680,12 +2111,14 @@ int glGenRenderbuffers()
 
 void glDeleteRenderbuffers(int renderbuffer)
 {
+    flushBatch();
     state().renderbuffers.erase(renderbuffer);
 }
 
 void glRenderbufferStorage(int renderbuffer, int width, int height)
 {
     State& s = state();
+    flushBatch();
     if (const auto it = s.renderbuffers.find(renderbuffer); it != s.renderbuffers.end())
         createRenderbufferStorage(it->second, width, height);
 }

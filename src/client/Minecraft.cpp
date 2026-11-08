@@ -1,6 +1,16 @@
 #include "client/Minecraft.h"
 
+#include "client/LoadingScreenRenderer.h"
 #include "client/audio/SoundHandler.h"
+#include "client/entity/EntityPlayerSP.h"
+#include "client/gui/GuiChat.h"
+#include "client/gui/GuiIngame.h"
+#include "client/gui/GuiIngameMenu.h"
+#include "client/gui/GuiNewChat.h"
+#include "client/multiplayer/PlayerControllerMP.h"
+#include "client/multiplayer/WorldClient.h"
+#include "client/network/NetHandlerLoginClient.h"
+#include "client/network/NetHandlerPlayClient.h"
 #include "client/gui/FontRenderer.h"
 #include "client/gui/GuiErrorScreen.h"
 #include "client/gui/GuiControls.h"
@@ -8,8 +18,11 @@
 #include "client/gui/GuiScreen.h"
 #include "client/gui/ScaledResolution.h"
 #include "client/renderer/DxStateManager.h"
+#include "client/renderer/BlockRendererDispatcher.h"
 #include "client/renderer/EntityRenderer.h"
 #include "client/renderer/OpenGlHelper.h"
+#include "client/renderer/RenderGlobal.h"
+#include "client/renderer/chunk/RenderChunk.h"
 #include "client/renderer/Tessellator.h"
 #include "client/renderer/entity/RenderItem.h"
 #include "client/renderer/texture/SimpleTexture.h"
@@ -17,6 +30,7 @@
 #include "client/renderer/texture/TextureMap.h"
 #include "client/renderer/texture/TextureUtil.h"
 #include "client/renderer/vertex/DefaultVertexFormats.h"
+#include "client/resources/ColorReloadListeners.h"
 #include "client/resources/DefaultResourcePack.h"
 #include "client/resources/LanguageManager.h"
 #include "client/resources/Locale.h"
@@ -28,14 +42,22 @@
 #include "core/Log.h"
 #include "core/StringUtil.h"
 #include "core/ZipArchive.h"
+#include "entity/player/InventoryPlayer.h"
+#include "item/ItemStack.h"
 #include "init/Bootstrap.h"
+#include "network/LoginPackets.h"
+#include "network/NetworkManager.h"
+#include "network/play/ClientPlayPackets.h"
 #include "platform/Display.h"
 #include "platform/Keyboard.h"
 #include "platform/Mouse.h"
 #include "platform/Sys.h"
 #include "render/gl/GL.h"
+#include "server/integrated/IntegratedServer.h"
+#include "util/MathHelper.h"
 #include "util/ScreenShotHelper.h"
 #include "world/WorldSettings.h"
+#include "world/World.h"
 #include "world/storage/ISaveHandler.h"
 #include "world/storage/SaveFormat.h"
 #include "world/storage/WorldInfo.h"
@@ -112,6 +134,7 @@ Minecraft::Minecraft(const GameConfiguration& gameConfig)
     , fileResourcepacks(gameConfig.folderInfo.resourcePacksDir)
     , launchedVersion(gameConfig.gameInfo.version)
     , debugUpdateTime(getSystemTime())
+    , session(gameConfig.userInfo.session)
     , startNanoTime(Sys::nanoTime())
 {
     theMinecraft = this;
@@ -203,7 +226,11 @@ void Minecraft::startGame()
     standardGalacticFontRenderer = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii_sga.png"), *renderEngine, false);
     mcResourceManager->registerReloadListener(*fontRendererObj);
     mcResourceManager->registerReloadListener(*standardGalacticFontRenderer);
-    // Java: GrassColorReloadListener, FoliageColorReloadListener (stage 7), AchievementList (stage 12); mouseHelper is a member
+    grassColorReloadListener = std::make_unique<GrassColorReloadListener>();
+    foliageColorReloadListener = std::make_unique<FoliageColorReloadListener>();
+    mcResourceManager->registerReloadListener(*grassColorReloadListener);
+    mcResourceManager->registerReloadListener(*foliageColorReloadListener);
+    // Java: AchievementList (stage 12); mouseHelper is a member
 
     DxStateManager::enableTexture2D();
     DxStateManager::shadeModel(7425);
@@ -227,11 +254,15 @@ void Minecraft::startGame()
     renderItem = std::make_unique<RenderItem>(*renderEngine, *modelManager);
     // Java: renderManager, itemRenderer (stage 7/10)
     mcResourceManager->registerReloadListener(*renderItem);
-    // Java: blockRenderDispatcher (stage 7)
+    blockRenderDispatcher = std::make_unique<BlockRendererDispatcher>(modelManager->getBlockModelShapes(), *gameSettings);
+    mcResourceManager->registerReloadListener(*blockRenderDispatcher);
     entityRenderer = std::make_unique<EntityRenderer>(*this);
-    // Java: renderGlobal, guiAchievement (stage 7/12)
+    renderGlobal = std::make_unique<RenderGlobal>(*this);
+    mcResourceManager->registerReloadListener(*renderGlobal);
+    // Java: guiAchievement (stage 12)
     DxStateManager::viewport(0, 0, displayWidth, displayHeight);
-    // Java: effectRenderer (stage 15), ingameGUI (stage 8)
+    // Java: effectRenderer (stage 15)
+    ingameGUI = std::make_unique<GuiIngame>(this);
 
     // Java: connects to --server here (stage 14).
     displayGuiScreen(std::make_shared<GuiMainMenu>());
@@ -239,7 +270,7 @@ void Minecraft::startGame()
     if (mojangLogo)
         renderEngine->deleteTexture(*mojangLogo);
     mojangLogo.reset();
-    // Java: loadingScreen = new LoadingScreenRenderer(this) (stage 5)
+    loadingScreen = std::make_unique<LoadingScreenRenderer>(*this);
 
     if (gameSettings->fullScreen && !fullscreen)
         toggleFullscreen();
@@ -267,7 +298,8 @@ void Minecraft::refreshResources()
         gameSettings->saveOptions();
     }
     mcLanguageManager->parseLanguageMetadata(list);
-    // Java: renderGlobal.loadRenderers() (stage 7)
+    if (renderGlobal)
+        renderGlobal->loadRenderers();
 }
 
 bool Minecraft::isUnicode() const
@@ -386,7 +418,9 @@ void Minecraft::runGameLoop()
     if (Display::isCreated() && Display::isCloseRequested())
         shutdown();
 
-    if (isGamePaused && theWorld != nullptr) {
+    mcProfiler.startSection("root");
+
+    if (gamePaused && theWorld != nullptr) {
         const float f = timer.renderPartialTicks;
         timer.updateTimer();
         timer.renderPartialTicks = f;
@@ -394,10 +428,20 @@ void Minecraft::runGameLoop()
         timer.updateTimer();
     }
 
-    // Java: scheduledExecutables (stage 9)
+    mcProfiler.startSection("scheduledExecutables");
+    // Java: the scheduled tasks -- the client's received packets (see NetworkManager.h).
+    retiredConnection.reset();
+    if (activeConnection) {
+        // The handler may drop the connection; keep it alive through the call.
+        const std::shared_ptr<NetworkManager> manager = activeConnection;
+        manager->processInboundPackets();
+    }
+    mcProfiler.endSection();
 
+    mcProfiler.startSection("tick");
     for (int j = 0; j < timer.elapsedTicks; ++j)
         runTick();
+    mcProfiler.endSection();
 
     // Java: sound listener (stage 13)
 
@@ -405,6 +449,8 @@ void Minecraft::runGameLoop()
     DxStateManager::clear(16640);
     framebufferMc->bindFramebuffer(true);
     DxStateManager::enableTexture2D();
+    if (thePlayer && thePlayer->isEntityInsideOpaqueBlock())
+        gameSettings->thirdPersonView = 0;
     if (!skipRenderWorld)
         entityRenderer->updateCameraAndRender(timer.renderPartialTicks, i);
     // Java: profiler chart (stage 8), guiAchievement.updateAchievementWindow() (stage 12)
@@ -418,8 +464,7 @@ void Minecraft::runGameLoop()
     std::this_thread::yield();
 
     ++fpsCounter;
-    // Java: isGamePaused = isSingleplayer() && currentScreen.doesGuiPauseGame() && !integratedServer.getPublic()
-    isGamePaused = false;
+    gamePaused = isSingleplayer() && currentScreen != nullptr && currentScreen->doesGuiPauseGame() && !theIntegratedServer->getPublic();
     const int64_t k = Sys::nanoTime();
     startNanoTime = k;
 
@@ -427,12 +472,13 @@ void Minecraft::runGameLoop()
         debugFPS = fpsCounter;
         const bool unlimited = static_cast<float>(gameSettings->limitFramerate) == GameSettings::Options::FRAMERATE_LIMIT.getValueMax();
         debug = std::format("{} fps ({} chunk update{}) T: {}{}{}{}{}",
-            debugFPS, 0, "s",
+            debugFPS, RenderChunk::renderChunksUpdated.load(), RenderChunk::renderChunksUpdated.load() != 1 ? "s" : "",
             unlimited ? std::string("inf") : std::to_string(gameSettings->limitFramerate),
             gameSettings->enableVsync ? " vsync" : "",
             gameSettings->fancyGraphics ? "" : " fast",
             gameSettings->clouds == 0 ? "" : (gameSettings->clouds == 1 ? " fast-clouds" : " fancy-clouds"),
             OpenGlHelper::vboSupported && gameSettings->useVbo ? " vbo" : "");
+        RenderChunk::renderChunksUpdated = 0;
         debugUpdateTime += 1000LL;
         fpsCounter = 0;
         usageSnooper->addMemoryStatsToSnooper();
@@ -442,13 +488,31 @@ void Minecraft::runGameLoop()
 
     if (isFramerateLimitBelowMax())
         Display::sync(getLimitFramerate());
+    mcProfiler.endSection();
 }
 
 void Minecraft::runTick()
 {
-    // Java: rightClickDelayTimer, ingameGUI.updateTick(), entityRenderer.getMouseOver(), playerController (stage 8)
-    if (!isGamePaused)
+    if (rightClickDelayTimer > 0)
+        --rightClickDelayTimer;
+
+    mcProfiler.startSection("gui");
+    if (!gamePaused)
+        ingameGUI->updateTick();
+    mcProfiler.endSection();
+    entityRenderer->getMouseOver(1.0f);
+    mcProfiler.startSection("gameMode");
+    if (!gamePaused && theWorld != nullptr)
+        playerController->updateController();
+    mcProfiler.endStartSection("textures");
+    if (!gamePaused)
         renderEngine->tick();
+
+    if (currentScreen == nullptr && thePlayer != nullptr) {
+        if (thePlayer->getHealth() <= 0.0f)
+            displayGuiScreen(nullptr);
+        // Java: GuiSleepMP while the player sleeps -- with beds (stage 12).
+    }
 
     if (currentScreen != nullptr)
         leftClickCounter = 10000;
@@ -460,44 +524,300 @@ void Minecraft::runTick()
     }
 
     if (currentScreen == nullptr || currentScreen->allowUserInput) {
+        mcProfiler.endStartSection("mouse");
         while (Mouse::next()) {
             const int i = Mouse::getEventButton();
             KeyBinding::setKeyBindState(i - 100, Mouse::getEventButtonState());
-            if (Mouse::getEventButtonState())
+            if (Mouse::getEventButtonState()) {
+                // Java: the middle button opens the spectator menu -- stage 12.
                 KeyBinding::onTick(i - 100);
-            // Java: hotbar scrolling and spectator menu (stage 8)
-            if (currentScreen == nullptr) {
-                if (!inGameHasFocus && Mouse::getEventButtonState())
-                    setIngameFocus();
-            } else {
-                currentScreen->handleMouseInput();
+            }
+
+            const int64_t i1 = getSystemTime() - systemTime;
+            if (i1 <= 200) {
+                int j = Mouse::getEventDWheel();
+                if (j != 0 && thePlayer) {
+                    if (thePlayer->isSpectator()) {
+                        j = j < 0 ? -1 : 1;
+                        const float f = MathHelper::clamp_float(thePlayer->capabilities.getFlySpeed() + static_cast<float>(j) * 0.005f, 0.0f, 0.2f);
+                        thePlayer->capabilities.setFlySpeed(f);
+                    } else {
+                        thePlayer->inventory->changeCurrentItem(j);
+                    }
+                }
+
+                if (currentScreen == nullptr) {
+                    if (!inGameHasFocus && Mouse::getEventButtonState())
+                        setIngameFocus();
+                } else {
+                    currentScreen->handleMouseInput();
+                }
             }
         }
 
         if (leftClickCounter > 0)
             --leftClickCounter;
 
+        mcProfiler.endStartSection("keyboard");
         while (Keyboard::next()) {
             const int k = Keyboard::getEventKey() == 0 ? Keyboard::getEventCharacter() + 256 : Keyboard::getEventKey();
             KeyBinding::setKeyBindState(k, Keyboard::getEventKeyState());
             if (Keyboard::getEventKeyState())
                 KeyBinding::onTick(k);
-            // Java: F3 debug combinations and the crash key (stage 8)
+            // Java: F3+C held for 6 seconds crashes the game on purpose -- the crash reports, stage 15.
             dispatchKeypresses();
+
             if (Keyboard::getEventKeyState()) {
-                if (currentScreen != nullptr)
+                // Java: F4 switches the post shader -- stage 15.
+                if (currentScreen != nullptr) {
                     currentScreen->handleKeyboardInput();
-                // Java: in-game keys (pause, F1, F3, F5...) (stage 8)
+                } else {
+                    if (k == 1)
+                        displayInGameMenu();
+                    if (k == 32 && Keyboard::isKeyDown(61) && ingameGUI)
+                        ingameGUI->getChatGUI().clearChatMessages();
+                    if (k == 31 && Keyboard::isKeyDown(61))
+                        refreshResources();
+                    if (k == 20 && Keyboard::isKeyDown(61))
+                        refreshResources();
+                    if (k == 33 && Keyboard::isKeyDown(61))
+                        gameSettings->setOptionValue(GameSettings::Options::RENDER_DISTANCE, GuiScreen::isShiftKeyDown() ? -1 : 1);
+                    if (k == 30 && Keyboard::isKeyDown(61))
+                        renderGlobal->loadRenderers();
+                    if (k == 35 && Keyboard::isKeyDown(61)) {
+                        gameSettings->advancedItemTooltips = !gameSettings->advancedItemTooltips;
+                        gameSettings->saveOptions();
+                    }
+                    // Java: F3+B toggles the entity hit boxes -- the render manager, stage 10.
+                    if (k == 25 && Keyboard::isKeyDown(61)) {
+                        gameSettings->pauseOnLostFocus = !gameSettings->pauseOnLostFocus;
+                        gameSettings->saveOptions();
+                    }
+                    if (k == 59)
+                        gameSettings->hideGUI = !gameSettings->hideGUI;
+                    if (k == 61) {
+                        gameSettings->showDebugInfo = !gameSettings->showDebugInfo;
+                        gameSettings->showDebugProfilerChart = GuiScreen::isShiftKeyDown();
+                        gameSettings->showLagometer = GuiScreen::isAltKeyDown();
+                    }
+                    if (gameSettings->keyBindTogglePerspective.isPressed()) {
+                        ++gameSettings->thirdPersonView;
+                        if (gameSettings->thirdPersonView > 2)
+                            gameSettings->thirdPersonView = 0;
+                        // Java: loads the spectated entity's shader -- stage 15.
+                        renderGlobal->setDisplayListEntitiesDirty();
+                    }
+                    if (gameSettings->keyBindSmoothCamera.isPressed())
+                        gameSettings->smoothCamera = !gameSettings->smoothCamera;
+                }
+                // Java: the profiler chart's section keys -- stage 15.
             }
         }
-        // Java: key bindings for the player (stage 8)
+
+        if (thePlayer) {
+            for (int l = 0; l < 9; ++l) {
+                if (gameSettings->keyBindsHotbar[static_cast<size_t>(l)].isPressed()) {
+                    // Java: the spectator menu takes the hotbar keys -- stage 12.
+                    if (!thePlayer->isSpectator())
+                        thePlayer->inventory->currentItem = l;
+                }
+            }
+
+            const bool flag = gameSettings->chatVisibility != EnumChatVisibility::HIDDEN;
+
+            while (gameSettings->keyBindInventory.isPressed()) {
+                // Java: also opens GuiInventory (or the horse inventory) -- stages 10 and 11.
+                getNetHandler()->addToSendQueue(std::make_shared<C16PacketClientStatus>(C16PacketClientStatus::EnumState::OPEN_INVENTORY_ACHIEVEMENT));
+            }
+
+            while (gameSettings->keyBindDrop.isPressed()) {
+                if (!thePlayer->isSpectator())
+                    thePlayer->dropOneItem(GuiScreen::isCtrlKeyDown());
+            }
+
+            while (gameSettings->keyBindChat.isPressed() && flag)
+                displayGuiScreen(std::make_shared<GuiChat>());
+
+            if (currentScreen == nullptr && gameSettings->keyBindCommand.isPressed() && flag)
+                displayGuiScreen(std::make_shared<GuiChat>("/"));
+
+            if (thePlayer->isUsingItem()) {
+                if (!gameSettings->keyBindUseItem.isKeyDown())
+                    playerController->onStoppedUsingItem(thePlayer.get());
+                while (gameSettings->keyBindAttack.isPressed()) {
+                }
+                while (gameSettings->keyBindUseItem.isPressed()) {
+                }
+                while (gameSettings->keyBindPickBlock.isPressed()) {
+                }
+            } else {
+                while (gameSettings->keyBindAttack.isPressed())
+                    clickMouse();
+                while (gameSettings->keyBindUseItem.isPressed())
+                    rightClickMouse();
+                while (gameSettings->keyBindPickBlock.isPressed())
+                    middleClickMouse();
+            }
+
+            if (gameSettings->keyBindUseItem.isKeyDown() && rightClickDelayTimer == 0 && !thePlayer->isUsingItem())
+                rightClickMouse();
+
+            sendClickBlockToController(currentScreen == nullptr && gameSettings->keyBindAttack.isKeyDown() && inGameHasFocus);
+        }
     }
 
-    if (!isGamePaused) {
+    if (theWorld != nullptr) {
+        if (thePlayer != nullptr) {
+            ++joinPlayerCounter;
+            if (joinPlayerCounter == 30) {
+                joinPlayerCounter = 0;
+                theWorld->joinEntityInSurroundings(thePlayer);
+            }
+        }
+
+        mcProfiler.endStartSection("gameRenderer");
+        if (!gamePaused)
+            entityRenderer->updateRenderer();
+        mcProfiler.endStartSection("levelRenderer");
+        if (!gamePaused)
+            renderGlobal->updateClouds();
+        mcProfiler.endStartSection("level");
+        if (!gamePaused) {
+            if (theWorld->getLastLightningBolt() > 0)
+                theWorld->setLastLightningBolt(theWorld->getLastLightningBolt() - 1);
+            theWorld->updateEntities();
+        }
+    }
+
+    if (!gamePaused) {
         mcMusicTicker->update();
         mcSoundHandler->update();
     }
-    // Java: world ticking (stage 9)
+
+    if (theWorld != nullptr) {
+        if (!gamePaused) {
+            theWorld->setAllowedSpawnTypes(theWorld->getDifficulty() != EnumDifficulty::PEACEFUL, true);
+            theWorld->tick();
+        }
+
+        mcProfiler.endStartSection("animateTick");
+        if (!gamePaused && theWorld != nullptr && thePlayer)
+            theWorld->doVoidFogParticles(
+                MathHelper::floor_double(thePlayer->posX), MathHelper::floor_double(thePlayer->posY), MathHelper::floor_double(thePlayer->posZ));
+        mcProfiler.endStartSection("particles");
+        // Java: effectRenderer.updateEffects() -- the particles, stage 15.
+    } else if (myNetworkManager) {
+        mcProfiler.endStartSection("pendingConnection");
+        const std::shared_ptr<NetworkManager> manager = myNetworkManager;
+        manager->processReceivedPackets();
+        // A closed login connection reports its reason (Java: through the Netty channel's close).
+        if (!manager->isChannelOpen())
+            manager->checkDisconnected();
+    }
+
+    mcProfiler.endSection();
+    systemTime = getSystemTime();
+}
+
+void Minecraft::sendClickBlockToController(bool leftClick)
+{
+    if (!leftClick)
+        leftClickCounter = 0;
+
+    if (leftClickCounter <= 0 && !thePlayer->isUsingItem()) {
+        if (leftClick && objectMouseOver && objectMouseOver->typeOfHit == MovingObjectPosition::MovingObjectType::BLOCK) {
+            const BlockPos blockpos = *objectMouseOver->getBlockPos();
+            if (&theWorld->getBlockState(blockpos)->getBlock()->getMaterial() != &Material::air
+                && playerController->onPlayerDamageBlock(blockpos, *objectMouseOver->sideHit)) {
+                // Java: effectRenderer.addBlockHitEffects -- the particles, stage 15.
+                thePlayer->swingItem();
+            }
+        } else {
+            playerController->resetBlockRemoving();
+        }
+    }
+}
+
+void Minecraft::clickMouse()
+{
+    if (leftClickCounter > 0)
+        return;
+
+    thePlayer->swingItem();
+
+    if (!objectMouseOver) {
+        Log::error("Null returned as 'hitResult', this shouldn't happen!");
+        if (playerController->isNotCreative())
+            leftClickCounter = 10;
+        return;
+    }
+
+    switch (objectMouseOver->typeOfHit) {
+    case MovingObjectPosition::MovingObjectType::ENTITY:
+        playerController->attackEntity(thePlayer.get(), objectMouseOver->entityHit);
+        break;
+    case MovingObjectPosition::MovingObjectType::BLOCK: {
+        const BlockPos blockpos = *objectMouseOver->getBlockPos();
+        if (&theWorld->getBlockState(blockpos)->getBlock()->getMaterial() != &Material::air) {
+            playerController->clickBlock(blockpos, *objectMouseOver->sideHit);
+            break;
+        }
+        [[fallthrough]];
+    }
+    default:
+        if (playerController->isNotCreative())
+            leftClickCounter = 10;
+    }
+}
+
+void Minecraft::rightClickMouse()
+{
+    if (playerController->getIsHittingBlock())
+        return;
+
+    rightClickDelayTimer = 4;
+    bool flag = true;
+    const std::shared_ptr<ItemStack> itemstack = thePlayer->inventory->getCurrentItem();
+
+    if (!objectMouseOver) {
+        Log::warn("Null returned as 'hitResult', this shouldn't happen!");
+    } else {
+        switch (objectMouseOver->typeOfHit) {
+        case MovingObjectPosition::MovingObjectType::ENTITY:
+            if (playerController->isPlayerRightClickingOnEntity(thePlayer.get(), objectMouseOver->entityHit, *objectMouseOver))
+                flag = false;
+            else if (playerController->interactWithEntitySendPacket(thePlayer.get(), objectMouseOver->entityHit))
+                flag = false;
+            break;
+        case MovingObjectPosition::MovingObjectType::BLOCK: {
+            const BlockPos blockpos = *objectMouseOver->getBlockPos();
+            if (&theWorld->getBlockState(blockpos)->getBlock()->getMaterial() != &Material::air) {
+                const int i = itemstack ? itemstack->stackSize : 0;
+                if (playerController->onPlayerRightClick(thePlayer.get(), theWorld, itemstack, blockpos, *objectMouseOver->sideHit, objectMouseOver->hitVec)) {
+                    flag = false;
+                    thePlayer->swingItem();
+                }
+                if (!itemstack)
+                    return;
+                if (itemstack->stackSize == 0) {
+                    thePlayer->inventory->mainInventory[static_cast<size_t>(thePlayer->inventory->currentItem)] = nullptr;
+                } else if (itemstack->stackSize != i || playerController->isInCreativeMode()) {
+                    // Java: entityRenderer.itemRenderer.resetEquippedProgress() -- the first-person item, stage 10.
+                }
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    if (flag) {
+        const std::shared_ptr<ItemStack> itemstack1 = thePlayer->inventory->getCurrentItem();
+        if (itemstack1 && playerController->sendUseItem(thePlayer.get(), theWorld, itemstack1)) {
+            // Java: entityRenderer.itemRenderer.resetEquippedProgress2() -- stage 10.
+        }
+    }
 }
 
 void Minecraft::displayGuiScreen(std::shared_ptr<GuiScreen> guiScreenIn)
@@ -509,11 +829,12 @@ void Minecraft::displayGuiScreen(std::shared_ptr<GuiScreen> guiScreenIn)
 
     if (guiScreenIn == nullptr && theWorld == nullptr)
         guiScreenIn = std::make_shared<GuiMainMenu>();
-    // Java: GuiGameOver when the player is dead (stage 8)
+    // Java: GuiGameOver when the player is dead -- the death screen comes with stage 12.
 
     if (dynamic_cast<GuiMainMenu*>(guiScreenIn.get())) {
         gameSettings->showDebugInfo = false;
-        // Java: ingameGUI.getChatGUI().clearChatMessages() (stage 8)
+        if (ingameGUI)
+            ingameGUI->getChatGUI().clearChatMessages();
     }
 
     currentScreen = guiScreenIn;
@@ -551,7 +872,9 @@ void Minecraft::setIngameNotInFocus()
 void Minecraft::displayInGameMenu()
 {
     if (currentScreen == nullptr) {
-        // Java: displayGuiScreen(new GuiIngameMenu()) and pauses the integrated server (stage 8)
+        displayGuiScreen(std::make_shared<GuiIngameMenu>());
+        if (isSingleplayer() && !theIntegratedServer->getPublic())
+            mcSoundHandler->pauseSounds();
     }
 }
 
@@ -659,13 +982,22 @@ void Minecraft::shutdown()
 void Minecraft::shutdownMinecraftApplet()
 {
     Log::info("Stopping!");
+    try {
+        loadWorld(nullptr);
+    } catch (const std::exception& e) {
+        Log::error("Error while unloading the world: {}", e.what());
+    }
     if (mcSoundHandler)
         mcSoundHandler->unloadSounds();
 
     // GL objects go before the context, like the JVM releasing them before Display.destroy().
     currentScreen.reset();
     mcResourcePackRepository.reset();
+    loadingScreen.reset();
+    ingameGUI.reset();
+    renderGlobal.reset();
     entityRenderer.reset();
+    blockRenderDispatcher.reset();
     fontRendererObj.reset();
     standardGalacticFontRenderer.reset();
     renderItem.reset();
@@ -717,18 +1049,151 @@ void Minecraft::addServerTypeToSnooper(PlayerUsageSnooper& playerSnooper)
     playerSnooper.addStatToSnooper("gl_max_texture_size", std::to_string(D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION));
 }
 
-void Minecraft::launchIntegratedServer(const std::string& folderName, const std::string& /*worldName*/, const WorldSettings* worldSettingsIn)
+void Minecraft::launchIntegratedServer(const std::string& folderName, const std::string& worldName, const WorldSettings* worldSettingsIn)
 {
-    // Java: loadWorld(null) first -- with the client world (stage 9).
+    loadWorld(nullptr);
     const std::shared_ptr<ISaveHandler> isavehandler = saveLoader->getSaveLoader(folderName, false);
     std::unique_ptr<WorldInfo> worldinfo = isavehandler->loadWorldInfo();
     if (!worldinfo && worldSettingsIn) {
         worldinfo = std::make_unique<WorldInfo>(*worldSettingsIn, folderName);
         isavehandler->saveWorldInfo(*worldinfo);
     }
-    // Java: new IntegratedServer(this, folderName, worldName, settings).startServerThread() and the
-    // GuiScreenWorking/connecting screens -- the integrated server is stage 9.
-    displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("menu.singleplayer"), "stage 9"));
+    const WorldSettings settings = worldSettingsIn ? *worldSettingsIn : WorldSettings(*worldinfo);
+
+    theIntegratedServer = std::make_unique<IntegratedServer>(this, folderName, worldName, settings);
+    theIntegratedServer->startServerThread();
+    integratedServerIsRunning = true;
+    loadingScreen->displaySavingString(I18n::format("menu.loadingLevel"));
+
+    while (!theIntegratedServer->serverIsInRunLoop()) {
+        if (theIntegratedServer->isServerStopped()) {
+            // Java: the server's crash report reaches the client through mc.crashed -- stage 15.
+            loadWorld(nullptr);
+            displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("menu.singleplayer"), "the integrated server stopped while loading"));
+            return;
+        }
+        const std::optional<std::string> s = theIntegratedServer->getUserMessage();
+        loadingScreen->displayLoadingString(s ? I18n::format(*s) : "");
+        Display::processMessages();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    displayGuiScreen(nullptr);
+    const std::shared_ptr<NetworkManager> networkmanager = theIntegratedServer->addLocalEndpoint();
+    networkmanager->setNetHandler(std::make_shared<NetHandlerLoginClient>(networkmanager.get(), this, nullptr));
+    networkmanager->sendPacket(std::make_shared<C00Handshake>(47, networkmanager->getRemoteAddress(), 0, EnumConnectionState::LOGIN));
+    networkmanager->sendPacket(std::make_shared<C00PacketLoginStart>(session.getProfile()));
+    myNetworkManager = networkmanager;
+    activeConnection = networkmanager;
+}
+
+void Minecraft::loadWorld(std::unique_ptr<WorldClient> worldClientIn, const std::string& loadingMessage)
+{
+    // The old world and connection stay alive until the end: the caller may be running inside them.
+    std::unique_ptr<WorldClient> oldWorld = std::move(worldOwner);
+    const std::shared_ptr<NetworkManager> oldNetworkManager = myNetworkManager;
+    const bool unloading = worldClientIn == nullptr;
+
+    if (unloading) {
+        if (NetHandlerPlayClient* nethandlerplayclient = getNetHandler())
+            nethandlerplayclient->cleanup();
+        if (theIntegratedServer) {
+            theIntegratedServer->initiateShutdown();
+            // Java lets the server thread finish on its own; the port waits so the save is complete.
+            theIntegratedServer->joinServerThread();
+        }
+        theIntegratedServer.reset();
+        // Java: guiAchievement.clearAchievements(), the map item renderer -- stages 12 and 10.
+    }
+
+    renderViewEntity = nullptr;
+    myNetworkManager = nullptr;
+    if (unloading)
+        retiredConnection = std::move(activeConnection);
+
+    if (loadingScreen) {
+        loadingScreen->resetProgressAndMessage(loadingMessage);
+        loadingScreen->displayLoadingString("");
+    }
+
+    if (unloading && theWorld != nullptr) {
+        // Java: mcResourcePackRepository.clearResourcePack() -- the server resource packs, stage 14.
+        ingameGUI->resetPlayersOverlayFooterHeader();
+        integratedServerIsRunning = false;
+    }
+
+    mcSoundHandler->stopSounds();
+    worldOwner = std::move(worldClientIn);
+    theWorld = worldOwner.get();
+
+    if (theWorld != nullptr) {
+        if (renderGlobal)
+            renderGlobal->setWorldAndLoadRenderers(theWorld);
+        // Java: effectRenderer.clearEffects(world) -- stage 15.
+        if (thePlayer == nullptr) {
+            thePlayer = playerController->func_178892_a(theWorld);
+            playerController->flipPlayer(thePlayer.get());
+        }
+        thePlayer->preparePlayerToSpawn();
+        theWorld->spawnEntityInWorld(thePlayer);
+        thePlayer->movementInput = std::make_unique<MovementInputFromOptions>(*gameSettings);
+        playerController->setPlayerCapabilities(thePlayer.get());
+        renderViewEntity = thePlayer.get();
+    } else {
+        if (renderGlobal)
+            renderGlobal->setWorldAndLoadRenderers(nullptr);
+        saveLoader->flushCache();
+        thePlayer = nullptr;
+        playerController.reset();
+    }
+
+    systemTime = 0;
+    // The old world goes last; its entities may still point at it.
+    oldWorld.reset();
+    (void)oldNetworkManager;
+}
+
+void Minecraft::setDimensionAndSpawnPlayer(int dimension)
+{
+    theWorld->setInitialSpawnLocation();
+    theWorld->removeAllEntities();
+    int i = 0;
+    std::string s;
+    const std::shared_ptr<EntityPlayerSP> entityplayersp = thePlayer;
+
+    if (thePlayer != nullptr) {
+        i = thePlayer->getEntityId();
+        theWorld->removeEntity(thePlayer.get());
+        s = thePlayer->getClientBrand();
+    }
+
+    renderViewEntity = nullptr;
+    thePlayer = playerController->func_178892_a(theWorld);
+    if (entityplayersp)
+        thePlayer->getDataWatcher().updateWatchedObjectsFromList(entityplayersp->getDataWatcher().getAllWatched());
+    thePlayer->dimension = dimension;
+    renderViewEntity = thePlayer.get();
+    thePlayer->preparePlayerToSpawn();
+    thePlayer->setClientBrand(s);
+    theWorld->spawnEntityInWorld(thePlayer);
+    playerController->flipPlayer(thePlayer.get());
+    thePlayer->movementInput = std::make_unique<MovementInputFromOptions>(*gameSettings);
+    thePlayer->setEntityId(i);
+    playerController->setPlayerCapabilities(thePlayer.get());
+    if (entityplayersp)
+        thePlayer->setReducedDebug(entityplayersp->hasReducedDebug());
+    // Java: closes GuiGameOver -- stage 12.
+}
+
+NetHandlerPlayClient* Minecraft::getNetHandler() const
+{
+    return thePlayer != nullptr ? thePlayer->sendQueue : nullptr;
+}
+
+void Minecraft::setRenderViewEntity(Entity* viewingEntity)
+{
+    renderViewEntity = viewingEntity;
+    // Java: entityRenderer.loadEntityShader(viewingEntity) -- the spectator shaders, stage 15.
 }
 
 } // namespace mc

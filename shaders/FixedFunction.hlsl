@@ -8,6 +8,7 @@
 #define FLAG_LIGHT1         0x10
 #define FLAG_COLOR_MATERIAL 0x20
 #define FLAG_NORMALIZE      0x40
+#define FLAG_FLAT           0x80
 
 #define FOG_NONE   0
 #define FOG_LINEAR 1
@@ -31,6 +32,9 @@ cbuffer DrawConstants : register(b0)
     float4 lightPosition[2];    // eye space, as glLight(GL_POSITION) stores it
     float4 lightDiffuse[2];
     float4 lightAmbient[2];
+    float4 lineParams;          // GL line width in pixels, viewport width, viewport height, 0
+    int fogRadial;              // glFogi(GL_FOG_DISTANCE_MODE_NV, GL_EYE_RADIAL_NV): distance instead of |z|
+    int3 padding;
 };
 
 Texture2D texture0 : register(t0);
@@ -85,24 +89,80 @@ float4 applyLighting(float4 vertexColor, float3 objectNormal)
     return float4(saturate(color), diffuse.a);
 }
 
-VertexOutput VSMain(VertexInput input)
+// Everything after the modelview transform.
+VertexOutput shadeVertex(float4 eye, float4 vertexColor, float2 uv0, float2 uv1, float3 normal)
 {
     VertexOutput output;
-    float4 eye = mul(modelView, float4(input.position, 1.0));
     float4 clip = mul(projection, eye);
     clip.z = (clip.z + clip.w) * 0.5; // GL clip depth [-w, w] -> D3D [0, w]
     clip.y = -clip.y;                 // render targets are stored bottom-up, like GL framebuffers
     output.position = clip;
 
-    float4 color = saturate(input.color);
+    float4 color = saturate(vertexColor);
     if (flags & FLAG_LIGHTING)
-        color = applyLighting(color, input.normal);
+        color = applyLighting(color, normal);
     output.color = color;
 
-    output.uv0 = transformTexCoord(textureMatrix0, input.uv0);
-    output.uv1 = transformTexCoord(textureMatrix1, input.uv1);
-    output.eyeDepth = abs(eye.z / eye.w);
+    output.uv0 = transformTexCoord(textureMatrix0, uv0);
+    output.uv1 = transformTexCoord(textureMatrix1, uv1);
+    output.eyeDepth = fogRadial ? length(eye.xyz / eye.w) : abs(eye.z / eye.w);
     return output;
+}
+
+VertexOutput VSMain(VertexInput input)
+{
+    return shadeVertex(mul(modelView, float4(input.position, 1.0)), input.color, input.uv0, input.uv1, input.normal);
+}
+
+// Render chunks (GL::drawBlockBuffers): the vertices in the BLOCK format exactly as WorldRenderer wrote them,
+// the chunk's modelview matrix and GL's current normal per instance. The normal matrix of the constants still
+// applies: the chunk matrices differ from the modelview they were built on by a translation and a scale of
+// 1.000001 only.
+struct ChunkVertexInput
+{
+    float3 position : POSITION;
+    float4 color : COLOR;           // 4 unsigned bytes, normalized as GL fetches them
+    float2 uv0 : TEXCOORD0;
+    int2 uv1 : TEXCOORD1;           // lightmap shorts, not normalized
+    float4 column0 : MODELVIEW0;    // per instance, GL column order
+    float4 column1 : MODELVIEW1;
+    float4 column2 : MODELVIEW2;
+    float4 column3 : MODELVIEW3;
+    float4 normal : NORMAL;         // per instance
+};
+
+VertexOutput VSChunk(ChunkVertexInput input)
+{
+    float4x4 chunkModelView = transpose(float4x4(input.column0, input.column1, input.column2, input.column3));
+    return shadeVertex(mul(chunkModelView, float4(input.position, 1.0)), input.color, input.uv0, float2(input.uv1), input.normal.xyz);
+}
+
+// glLineWidth above 1: GL widens a non-antialiased line along its minor axis by the width in pixels, without
+// extending its ends. Direct3D draws 1-pixel lines only, so each segment becomes that parallelogram here.
+[maxvertexcount(4)]
+void GSWideLine(line VertexOutput input[2], inout TriangleStream<VertexOutput> stream)
+{
+    float2 p0 = input[0].position.xy / input[0].position.w * lineParams.yz * 0.5;
+    float2 p1 = input[1].position.xy / input[1].position.w * lineParams.yz * 0.5;
+    float2 d = p1 - p0;
+    float2 offsetPixels = abs(d.x) >= abs(d.y) ? float2(0.0, lineParams.x * 0.5) : float2(lineParams.x * 0.5, 0.0);
+    float2 offsetClip = offsetPixels / (lineParams.yz * 0.5);
+
+    VertexOutput v[4] = { input[0], input[0], input[1], input[1] };
+    v[0].position.xy -= offsetClip * input[0].position.w;
+    v[1].position.xy += offsetClip * input[0].position.w;
+    v[2].position.xy -= offsetClip * input[1].position.w;
+    v[3].position.xy += offsetClip * input[1].position.w;
+    if (flags & FLAG_FLAT)
+    {
+        [unroll]
+        for (int i = 1; i < 4; ++i)
+            v[i].color = input[0].color;
+    }
+    stream.Append(v[0]);
+    stream.Append(v[1]);
+    stream.Append(v[2]);
+    stream.Append(v[3]);
 }
 
 bool alphaTestPasses(float alpha)

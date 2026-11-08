@@ -14,7 +14,7 @@
 namespace mc {
 
 class DynamicTexture;
-class ITickable;
+class ITickableTexture;
 
 class TextureManager : public IResourceManagerReloadListener {
 public:
@@ -26,7 +26,7 @@ public:
     ResourceLocation getDynamicTextureLocation(const std::string& name, std::shared_ptr<DynamicTexture> texture);
     void deleteTexture(const ResourceLocation& textureLocation);
     // Java: loadTickableTexture(location, ITickableTextureObject) -- the texture is ticked every game tick.
-    bool loadTickableTexture(const ResourceLocation& textureLocation, std::shared_ptr<ITextureObject> textureObj, ITickable* tickable);
+    bool loadTickableTexture(const ResourceLocation& textureLocation, std::shared_ptr<ITextureObject> textureObj, ITickableTexture* tickable);
     // Ticks the textures registered with loadTickableTexture (the block atlas animations).
     void tick();
 
@@ -35,7 +35,7 @@ public:
 private:
     std::unordered_map<ResourceLocation, std::shared_ptr<ITextureObject>> mapTextureObjects;
     std::unordered_map<std::string, int> mapTextureCounters;
-    std::vector<ITickable*> listTickables;
+    std::vector<ITickableTexture*> listTickables;
     const IResourceManager* theResourceManager;
 };
 

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -64,10 +65,19 @@ RenderDevice::RenderDevice(HWND windowHandle, int initialWidth, int initialHeigh
     createDevice();
     createSwapChain();
     createBackBufferTargets();
+    renderThread = std::thread([this] { renderThreadMain(); });
 }
 
 RenderDevice::~RenderDevice()
 {
+    {
+        std::unique_lock lock(renderMutex);
+        renderCondition.wait(lock, [this] { return !queuedFrame && !renderBusy; });
+        renderStop = true;
+    }
+    renderCondition.notify_all();
+    if (renderThread.joinable())
+        renderThread.join();
     if (context) {
         context->ClearState();
         context->Flush();
@@ -216,6 +226,7 @@ void RenderDevice::resize(int newWidth, int newHeight)
     newHeight = std::max(1, newHeight);
     if (newWidth == width && newHeight == height)
         return;
+    waitForRenderThread();
 
     width = newWidth;
     height = newHeight;
@@ -252,19 +263,103 @@ void RenderDevice::clear(float red, float green, float blue, float alpha)
 
 void RenderDevice::present(bool vsync)
 {
+    Frame frame;
     if (prePresent)
-        prePresent();
+        frame.job = prePresent();
+    frame.vsync = vsync;
 
-    // Tearing lets "vsync off" actually exceed the refresh rate in windowed and borderless modes.
-    const UINT syncInterval = vsync ? 1 : 0;
-    const UINT flags = (!vsync && tearingSupported) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+    HRESULT result;
+    {
+        std::unique_lock lock(renderMutex);
+        renderCondition.wait(lock, [this] { return !queuedFrame; });
+        queuedFrame = std::move(frame);
+        result = presentResult;
+        presentResult = S_OK;
+    }
+    renderCondition.notify_all();
 
-    const HRESULT hr = swapChain->Present(syncInterval, flags);
-    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
-        recreateAfterDeviceLoss(hr == DXGI_ERROR_DEVICE_REMOVED ? device->GetDeviceRemovedReason() : hr);
+    // A failure of an earlier Present (on the render thread) is handled here.
+    if (result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET) {
+        waitForRenderThread();
+        recreateAfterDeviceLoss(result == DXGI_ERROR_DEVICE_REMOVED ? device->GetDeviceRemovedReason() : result);
         return;
     }
-    throwIfFailed(hr, "IDXGISwapChain::Present");
+    throwIfFailed(result, "IDXGISwapChain::Present");
+}
+
+void RenderDevice::waitForRenderThread()
+{
+    std::unique_lock lock(renderMutex);
+    renderCondition.wait(lock, [this] { return !queuedFrame && !renderBusy; });
+}
+
+void RenderDevice::runOnImmediateContext(const RenderJob& job)
+{
+    // The render thread does not touch the context while it waits for a frame.
+    std::unique_lock lock(renderMutex);
+    renderCondition.wait(lock, [this] { return !queuedFrame && !renderBusy; });
+    execute(job);
+}
+
+void RenderDevice::execute(const RenderJob& job)
+{
+    if (job.commands)
+        context->ExecuteCommandList(job.commands.Get(), FALSE);
+    if (job.after)
+        job.after(context.Get());
+}
+
+void RenderDevice::renderThreadMain()
+{
+    Log::setThreadName("Render thread");
+    for (;;) {
+        Frame frame;
+        {
+            std::unique_lock lock(renderMutex);
+            renderCondition.wait(lock, [this] { return renderStop || queuedFrame; });
+            if (!queuedFrame)
+                return;
+            frame = std::move(*queuedFrame);
+            queuedFrame.reset();
+            renderBusy = true;
+        }
+        renderCondition.notify_all();
+
+        execute(frame.job);
+        // Tearing lets "vsync off" actually exceed the refresh rate in windowed and borderless modes.
+        const UINT syncInterval = frame.vsync ? 1 : 0;
+        const UINT flags = (!frame.vsync && tearingSupported) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+        const HRESULT hr = swapChain->Present(syncInterval, flags);
+        frame = Frame {};
+        logDebugMessages();
+
+        {
+            std::lock_guard lock(renderMutex);
+            renderBusy = false;
+            if (FAILED(hr) && SUCCEEDED(presentResult))
+                presentResult = hr;
+        }
+        renderCondition.notify_all();
+    }
+}
+
+void RenderDevice::logDebugMessages()
+{
+#ifdef MC_DEBUG
+    ComPtr<ID3D11InfoQueue> infoQueue;
+    if (FAILED(device.As(&infoQueue)))
+        return;
+    const UINT64 count = infoQueue->GetNumStoredMessages();
+    for (UINT64 i = 0; i < count && i < 16; ++i) {
+        SIZE_T length = 0;
+        infoQueue->GetMessage(i, nullptr, &length);
+        std::vector<uint8_t> buffer(length);
+        auto* message = reinterpret_cast<D3D11_MESSAGE*>(buffer.data());
+        if (SUCCEEDED(infoQueue->GetMessage(i, message, &length)) && message->Severity <= D3D11_MESSAGE_SEVERITY_WARNING)
+            Log::warn("[D3D11] {}", std::string(message->pDescription, message->DescriptionByteLength > 0 ? message->DescriptionByteLength - 1 : 0));
+    }
+    infoQueue->ClearStoredMessages();
+#endif
 }
 
 void RenderDevice::recreateAfterDeviceLoss(HRESULT reason)

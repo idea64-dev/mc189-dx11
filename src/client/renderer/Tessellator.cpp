@@ -46,75 +46,82 @@ float component(const uint8_t* data, VertexFormatElement::EnumType type, int i, 
 
 } // namespace
 
+void convertVertexData(const WorldRenderer& worldRenderer, std::vector<GLVertex>& vertices)
+{
+    convertVertexData(worldRenderer.getByteBuffer(), worldRenderer.getVertexFormat(), worldRenderer.getVertexCount(), vertices);
+}
+
+void convertVertexData(std::span<const uint8_t> bytes, const VertexFormat& format, int vertexCount, std::vector<GLVertex>& vertices)
+{
+    const int stride = format.getNextOffset();
+
+    GLVertex defaults {};
+    const float* color = GL::currentColor();
+    const float* normal = GL::currentNormal();
+    const float* uv0 = GL::currentTexCoord(0);
+    const float* uv1 = GL::currentTexCoord(1);
+    defaults.r = color[0];
+    defaults.g = color[1];
+    defaults.b = color[2];
+    defaults.a = color[3];
+    defaults.u0 = uv0[0];
+    defaults.v0 = uv0[1];
+    defaults.u1 = uv1[0];
+    defaults.v1 = uv1[1];
+    defaults.nx = normal[0];
+    defaults.ny = normal[1];
+    defaults.nz = normal[2];
+
+    vertices.assign(static_cast<size_t>(vertexCount), defaults);
+    for (int e = 0; e < format.getElementCount(); ++e) {
+        const VertexFormatElement& element = format.getElement(e);
+        const int offset = format.getOffset(e);
+        const auto type = element.getType();
+        const int count = element.getElementCount();
+
+        for (size_t v = 0; v < vertices.size(); ++v) {
+            const uint8_t* data = bytes.data() + v * static_cast<size_t>(stride) + static_cast<size_t>(offset);
+            GLVertex& out = vertices[v];
+            switch (element.getUsage()) {
+            case VertexFormatElement::EnumUsage::POSITION:
+                out.x = component(data, type, 0, false);
+                out.y = count > 1 ? component(data, type, 1, false) : 0.0f;
+                out.z = count > 2 ? component(data, type, 2, false) : 0.0f;
+                break;
+            case VertexFormatElement::EnumUsage::COLOR:
+                out.r = component(data, type, 0, true);
+                out.g = component(data, type, 1, true);
+                out.b = component(data, type, 2, true);
+                out.a = count > 3 ? component(data, type, 3, true) : 1.0f;
+                break;
+            case VertexFormatElement::EnumUsage::UV:
+                if (element.getIndex() == 0) {
+                    out.u0 = component(data, type, 0, false);
+                    out.v0 = count > 1 ? component(data, type, 1, false) : 0.0f;
+                } else if (element.getIndex() == 1) {
+                    out.u1 = component(data, type, 0, false);
+                    out.v1 = count > 1 ? component(data, type, 1, false) : 0.0f;
+                }
+                break;
+            case VertexFormatElement::EnumUsage::NORMAL:
+                out.nx = component(data, type, 0, true);
+                out.ny = component(data, type, 1, true);
+                out.nz = component(data, type, 2, true);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
 void WorldVertexBufferUploader::draw(WorldRenderer& worldRenderer)
 {
     if (worldRenderer.getVertexCount() > 0) {
-        const VertexFormat& format = worldRenderer.getVertexFormat();
-        const int stride = format.getNextOffset();
-        const std::span<const uint8_t> bytes = worldRenderer.getByteBuffer();
-
-        GLVertex defaults {};
-        const float* color = GL::currentColor();
-        const float* normal = GL::currentNormal();
-        const float* uv0 = GL::currentTexCoord(0);
-        const float* uv1 = GL::currentTexCoord(1);
-        defaults.r = color[0];
-        defaults.g = color[1];
-        defaults.b = color[2];
-        defaults.a = color[3];
-        defaults.u0 = uv0[0];
-        defaults.v0 = uv0[1];
-        defaults.u1 = uv1[0];
-        defaults.v1 = uv1[1];
-        defaults.nx = normal[0];
-        defaults.ny = normal[1];
-        defaults.nz = normal[2];
-
-        vertices.assign(static_cast<size_t>(worldRenderer.getVertexCount()), defaults);
-        for (int e = 0; e < format.getElementCount(); ++e) {
-            const VertexFormatElement& element = format.getElement(e);
-            const int offset = format.getOffset(e);
-            const auto type = element.getType();
-            const int count = element.getElementCount();
-
-            for (size_t v = 0; v < vertices.size(); ++v) {
-                const uint8_t* data = bytes.data() + v * static_cast<size_t>(stride) + static_cast<size_t>(offset);
-                GLVertex& out = vertices[v];
-                switch (element.getUsage()) {
-                case VertexFormatElement::EnumUsage::POSITION:
-                    out.x = component(data, type, 0, false);
-                    out.y = count > 1 ? component(data, type, 1, false) : 0.0f;
-                    out.z = count > 2 ? component(data, type, 2, false) : 0.0f;
-                    break;
-                case VertexFormatElement::EnumUsage::COLOR:
-                    out.r = component(data, type, 0, true);
-                    out.g = component(data, type, 1, true);
-                    out.b = component(data, type, 2, true);
-                    out.a = count > 3 ? component(data, type, 3, true) : 1.0f;
-                    break;
-                case VertexFormatElement::EnumUsage::UV:
-                    if (element.getIndex() == 0) {
-                        out.u0 = component(data, type, 0, false);
-                        out.v0 = count > 1 ? component(data, type, 1, false) : 0.0f;
-                    } else if (element.getIndex() == 1) {
-                        out.u1 = component(data, type, 0, false);
-                        out.v1 = count > 1 ? component(data, type, 1, false) : 0.0f;
-                    }
-                    break;
-                case VertexFormatElement::EnumUsage::NORMAL:
-                    out.nx = component(data, type, 0, true);
-                    out.ny = component(data, type, 1, true);
-                    out.nz = component(data, type, 2, true);
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-
+        convertVertexData(worldRenderer, vertices);
         GL::drawVertices(worldRenderer.getDrawMode(), vertices);
 
-        if (format.hasColor())
+        if (worldRenderer.getVertexFormat().hasColor())
             DxStateManager::resetColor();
     }
 

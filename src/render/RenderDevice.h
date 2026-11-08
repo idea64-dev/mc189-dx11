@@ -5,9 +5,13 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
 
 namespace mc {
 
@@ -19,8 +23,17 @@ struct AdapterInfo {
     bool software = false;
 };
 
+// Work for the immediate context: a recorded command list, then a function run on the context.
+struct RenderJob {
+    Microsoft::WRL::ComPtr<ID3D11CommandList> commands;
+    std::function<void(ID3D11DeviceContext*)> after;
+};
+
 // Direct3D 11 device, immediate context and flip-model swapchain for one window.
 // Plays the role of the OpenGL context that LWJGL's Display.create() made in the original.
+// The frames are recorded elsewhere (the GL emulation's deferred context) and executed and presented on a
+// render thread, which owns the immediate context; the next frame is recorded meanwhile. Anything else that
+// needs the immediate context waits until the render thread is idle (runOnImmediateContext, resize).
 class RenderDevice {
 public:
     RenderDevice(HWND hwnd, int width, int height);
@@ -36,9 +49,16 @@ public:
     void bindBackBuffer();
     // Equivalent of Java GlStateManager.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT).
     void clear(float red, float green, float blue, float alpha);
+    // Hands the frame to the render thread (waiting while the previous one is still queued), which executes
+    // the job of the pre-present callback and presents.
     void present(bool vsync);
-    // Runs right before every Present (the GL emulation copies the window framebuffer to the back buffer here).
-    void setPrePresentCallback(std::function<void()> callback) { prePresent = std::move(callback); }
+    // Records the end of a frame: the GL emulation finishes its command list and copies the window
+    // framebuffer to the back buffer (the job's function, on the render thread).
+    void setPrePresentCallback(std::function<RenderJob()> callback) { prePresent = std::move(callback); }
+    // Runs the job on the calling thread once the render thread is idle (read-backs).
+    void runOnImmediateContext(const RenderJob& job);
+    // Until every submitted frame has been executed and presented.
+    void waitForRenderThread();
     ID3D11RenderTargetView* getBackBufferView() const { return backBufferView.Get(); }
 
     ID3D11Device* getDevice() const { return device.Get(); }
@@ -54,6 +74,9 @@ private:
     void createBackBufferTargets();
     void releaseBackBufferTargets();
     void recreateAfterDeviceLoss(HRESULT reason);
+    void renderThreadMain();
+    void execute(const RenderJob& job);
+    void logDebugMessages();
 
     HWND hwnd;
     int width;
@@ -67,7 +90,19 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> depthBuffer;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthView;
 
-    std::function<void()> prePresent;
+    std::function<RenderJob()> prePresent;
+
+    struct Frame {
+        RenderJob job;
+        bool vsync = false;
+    };
+    std::thread renderThread;
+    std::mutex renderMutex;
+    std::condition_variable renderCondition;
+    std::optional<Frame> queuedFrame;
+    bool renderBusy = false;
+    bool renderStop = false;
+    HRESULT presentResult = S_OK;
     AdapterInfo adapterInfo;
     bool tearingSupported = false;
     UINT swapChainFlags = 0;

@@ -1,7 +1,7 @@
 #pragma once
 
 // Original: net/minecraft/client/renderer/texture/TextureMap.java, IIconCreator.java,
-// ITickableTextureObject.java and util/ITickable.java
+// ITickableTextureObject.java and ITickable.java
 // The block/item atlas: loads every registered sprite (with its .mcmeta), generates mip levels, stitches them
 // into one texture and uploads it; animated sprites are updated every tick.
 
@@ -20,17 +20,18 @@ namespace mc {
 class TextureAtlasSprite;
 class TextureMap;
 
-// Java: ITickable (ITickableTextureObject is a texture that is also this).
-class ITickable {
+// Java: client/renderer/texture/ITickable (ITickableTextureObject is a texture that is also this) -- renamed
+// here, util/ITickable.h is the other ITickable.
+class ITickableTexture {
 public:
-    virtual ~ITickable() = default;
+    virtual ~ITickableTexture() = default;
     virtual void tick() = 0;
 };
 
 // Java: IIconCreator.registerSprites
 using IIconCreator = std::function<void(TextureMap&)>;
 
-class TextureMap : public AbstractTexture, public ITickable {
+class TextureMap : public AbstractTexture, public ITickableTexture {
 public:
     static const ResourceLocation LOCATION_MISSING_TEXTURE;
     static const ResourceLocation locationBlocksTexture;

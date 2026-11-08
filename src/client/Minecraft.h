@@ -2,16 +2,19 @@
 
 // Original: net/minecraft/client/Minecraft.java
 // Ported so far: startup, resources, languages, settings, sound, fonts, the GUI screen flow, the game loop,
-// resizing, fullscreen, screenshots and frame limiting. World, player, networking and the integrated server
-// arrive in later ROADMAP stages; their call sites are noted inline.
+// resizing, fullscreen, screenshots, frame limiting, the integrated server, the client world and player, the
+// world renderer and the in-game input. Later ROADMAP stages are noted inline (effects, statistics, streams...).
 
 #include "client/audio/MusicTicker.h"
 #include "client/main/GameConfiguration.h"
 #include "client/settings/GameSettings.h"
 #include "profiler/PlayerUsageSnooper.h"
+#include "profiler/Profiler.h"
 #include "util/MouseHelper.h"
 #include "util/ResourceLocation.h"
+#include "util/Session.h"
 #include "util/Timer.h"
+#include "util/Vec3.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -22,16 +25,27 @@
 
 namespace mc {
 
+class BlockRendererDispatcher;
 class DefaultResourcePack;
+class Entity;
+class EntityPlayerSP;
 class EntityRenderer;
 class FontRenderer;
 class Framebuffer;
+class GuiIngame;
+class IResourceManagerReloadListener;
 class GuiScreen;
+class IntegratedServer;
 class IResourceManager;
 class IResourcePack;
 class ISaveFormat;
 class LanguageManager;
+class LoadingScreenRenderer;
 class ModelManager;
+class NetHandlerPlayClient;
+class NetworkManager;
+class PlayerControllerMP;
+class RenderGlobal;
 class RenderItem;
 class ResourcePackRepository;
 class SimpleReloadableResourceManager;
@@ -85,6 +99,22 @@ public:
     // Opens (or with settings, creates) a world and starts the integrated server for it. A null settings
     // pointer is Java's null: the world must exist.
     void launchIntegratedServer(const std::string& folderName, const std::string& worldName, const WorldSettings* worldSettingsIn);
+    // Java: loadWorld(world[, message]) -- null unloads the world and stops the integrated server.
+    void loadWorld(std::unique_ptr<WorldClient> worldClientIn, const std::string& loadingMessage = "");
+    void setDimensionAndSpawnPlayer(int dimension);
+    NetHandlerPlayClient* getNetHandler() const;
+    bool isSingleplayer() const { return integratedServerIsRunning && theIntegratedServer != nullptr; }
+    bool isIntegratedServerRunning() const { return integratedServerIsRunning; }
+    IntegratedServer* getIntegratedServer() const { return theIntegratedServer.get(); }
+    const Session& getSession() const { return session; }
+    const std::filesystem::path& getDataDirectory() const { return mcDataDir; }
+    const std::string& getVersion() const { return launchedVersion; }
+    bool isGamePaused() const { return gamePaused; }
+    bool isRunning() const { return running; }
+    Entity* getRenderViewEntity() const { return renderViewEntity; }
+    void setRenderViewEntity(Entity* viewingEntity);
+    BlockRendererDispatcher& getBlockRendererDispatcher() { return *blockRenderDispatcher; }
+    void updateDisplay();
     PlayerUsageSnooper& getPlayerUsageSnooper() { return *usageSnooper; }
     // Java: getIntegratedServer().getPlayerUsageSnooper(). Vanilla creates an idle IntegratedServer at startup,
     // so the snooper screen lists its stats even in the main menu.
@@ -114,8 +144,16 @@ public:
     bool inGameHasFocus = false;
     bool skipRenderWorld = false;
 
-    // Not ported yet; kept so the ported logic reads like the original.
     WorldClient* theWorld = nullptr;
+    std::shared_ptr<EntityPlayerSP> thePlayer;
+    std::unique_ptr<PlayerControllerMP> playerController;
+    std::unique_ptr<GuiIngame> ingameGUI;
+    std::unique_ptr<EntityRenderer> entityRenderer;
+    std::unique_ptr<RenderGlobal> renderGlobal;
+    std::unique_ptr<LoadingScreenRenderer> loadingScreen;
+    std::optional<MovingObjectPosition> objectMouseOver;
+    Entity* pointedEntity = nullptr;
+    Profiler mcProfiler;
 
 private:
     void startGame();
@@ -125,8 +163,11 @@ private:
     void setInitialDisplayMode();
     void runGameLoop();
     void runTick();
-    void updateDisplay();
     void checkWindowResize();
+    void clickMouse();
+    void rightClickMouse();
+    void middleClickMouse() { }
+    void sendClickBlockToController(bool leftClick);
     void resize(int width, int height);
     void updateFramebufferSize();
     void shutdownMinecraftApplet();
@@ -153,11 +194,27 @@ private:
     std::unique_ptr<RenderItem> renderItem;
     std::unique_ptr<SoundHandler> mcSoundHandler;
     std::unique_ptr<MusicTicker> mcMusicTicker;
-    std::unique_ptr<EntityRenderer> entityRenderer;
+    std::unique_ptr<BlockRendererDispatcher> blockRenderDispatcher;
+    std::unique_ptr<IResourceManagerReloadListener> grassColorReloadListener;
+    std::unique_ptr<IResourceManagerReloadListener> foliageColorReloadListener;
     std::unique_ptr<Framebuffer> framebufferMc;
     std::optional<ResourceLocation> mojangLogo;
     volatile bool running = true;
-    bool isGamePaused = false;
+    bool gamePaused = false;
+    Session session;
+    std::unique_ptr<WorldClient> worldOwner;
+    Entity* renderViewEntity = nullptr;
+    // Java: myNetworkManager is the pending connection only (null once the world loads); the connection itself
+    // lives on through the net handler. Here it is kept by activeConnection until the world unloads, and a
+    // closed one is released at the next frame (the call that closed it may still be running inside it).
+    std::shared_ptr<NetworkManager> myNetworkManager;
+    std::shared_ptr<NetworkManager> activeConnection;
+    std::shared_ptr<NetworkManager> retiredConnection;
+    std::unique_ptr<IntegratedServer> theIntegratedServer;
+    bool integratedServerIsRunning = false;
+    int rightClickDelayTimer = 0;
+    int joinPlayerCounter = 0;
+    int64_t systemTime = 0;
     int leftClickCounter = 0;
     int fpsCounter = 0;
     int64_t debugUpdateTime;

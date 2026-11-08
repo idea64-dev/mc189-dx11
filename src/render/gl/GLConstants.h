@@ -93,6 +93,7 @@ inline constexpr int GL_PROJECTION = 0x1701;
 inline constexpr int GL_TEXTURE = 0x1702;
 inline constexpr int GL_MODELVIEW_MATRIX = 0x0BA6;
 inline constexpr int GL_PROJECTION_MATRIX = 0x0BA7;
+inline constexpr int GL_VIEWPORT = 0x0BA2;
 
 // Fog
 inline constexpr int GL_FOG_DENSITY = 0x0B62;
@@ -103,6 +104,10 @@ inline constexpr int GL_FOG_COLOR = 0x0B66;
 inline constexpr int GL_EXP = 0x0800;
 inline constexpr int GL_EXP2 = 0x0801;
 inline constexpr int GL_LINEAR = 0x2601;
+// NV_fog_distance, used when the driver has it (EntityRenderer.setupFog)
+inline constexpr int GL_FOG_DISTANCE_MODE_NV = 0x855A;
+inline constexpr int GL_EYE_RADIAL_NV = 0x855B;
+inline constexpr int GL_EYE_PLANE_ABSOLUTE_NV = 0x855C;
 
 // Lighting
 inline constexpr int GL_AMBIENT = 0x1200;
