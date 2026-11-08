@@ -21,6 +21,7 @@ public:
     bool isFullCube() const override { return false; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(MOISTURE, meta & 7); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(MOISTURE); }
+    Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const override;
 
 protected:
     void construct() override

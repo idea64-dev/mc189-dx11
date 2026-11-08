@@ -30,6 +30,7 @@ public:
         return getDefaultState()->withProperty(FACING, enumfacing);
     }
     int getMetaFromState(const IBlockState* state) const override { return getIndex(state->getValue(FACING)); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::obsidian); }
 
 protected:
     void construct() override

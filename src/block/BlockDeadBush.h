@@ -16,6 +16,7 @@ public:
     }
 
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::woodColor; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
 
 protected:
     void construct() override

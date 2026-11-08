@@ -6,6 +6,8 @@
 #include "creativetab/CreativeTabs.h"
 #include "core/JavaString.h"
 #include "init/Bootstrap.h"
+#include "item/ItemStack.h"
+#include "util/Random.h"
 
 #include <doctest/doctest.h>
 
@@ -67,6 +69,28 @@ const char* offsetName(Block::EnumOffsetType type)
     return names[static_cast<int>(type)];
 }
 
+std::string itemName(const Item* item)
+{
+    return item ? Item::getNameForItem(item)->getResourcePath() : "null";
+}
+
+// The silk touch stack, then quantity and item for fortune 0 and 3 with a fresh Random per seed 0..3.
+std::string drops(const Block& block, const IBlockState* state)
+{
+    const ItemStack silk = block.createStackedBlock(state);
+    std::string s = "silk=" + itemName(silk.getItem()) + ":" + std::to_string(silk.getItemDamage());
+    for (int fortune = 0; fortune <= 3; fortune += 3) {
+        s += " f" + std::to_string(fortune) + "=";
+        for (int64_t seed = 0; seed < 4; ++seed) {
+            Random rand(seed);
+            const int quantity = block.quantityDroppedWithBonus(fortune, rand);
+            const Item* item = block.getItemDropped(state, rand, fortune);
+            s += (seed == 0 ? "" : ",") + std::to_string(quantity) + "*" + itemName(item);
+        }
+    }
+    return s;
+}
+
 std::string dumpBlock(const Block& block)
 {
     std::ostringstream out;
@@ -104,6 +128,7 @@ std::string dumpBlock(const Block& block)
         out << " state " << state->toString() << " meta=" << block.getMetaFromState(state) << " id=" << Block::BLOCK_STATE_IDS.get(state)
             << " stateId=" << Block::getStateId(state) << " map=" << block.getMapColor(state).colorIndex << " renderColor=" << block.getRenderColor(state)
             << " dropped=" << block.damageDropped(state) << "\n";
+        out << " drops " << drops(block, state) << "\n";
     }
     for (int meta = 0; meta < 16; ++meta) {
         std::string s;

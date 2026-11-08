@@ -65,6 +65,7 @@ public:
 
     bool canProvidePower() const override { return true; }
     bool isAssociatedBlock(const Block* other) const override { return other == Blocks::unlit_redstone_torch || other == Blocks::redstone_torch; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::redstone_torch); }
 
 protected:
     void construct() override

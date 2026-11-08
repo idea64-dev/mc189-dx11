@@ -23,6 +23,7 @@ public:
     bool hasComparatorInputOverride() const override { return true; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(LEVEL, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(LEVEL); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::cauldron; }
 
 protected:
     void construct() override

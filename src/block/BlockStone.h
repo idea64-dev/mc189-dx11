@@ -40,8 +40,8 @@ public:
     int damageDropped(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
-    // Java: getItemDropped gives cobblestone for plain stone (items, stage 4).
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 7); }
+    Item* getItemDropped(const IBlockState* state, Random&, int) const override { return Item::getItemFromBlock(state->getValue(VARIANT) == EnumType::STONE ? Blocks::cobblestone : Blocks::stone); }
 
 protected:
     void construct() override

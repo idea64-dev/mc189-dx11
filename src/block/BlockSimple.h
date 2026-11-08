@@ -25,10 +25,13 @@ public:
 
     int quantityDroppedWithBonus(int fortune, Random& random) const override
     {
-        return MathHelper::clamp_int(quantityDropped(random) + random.nextInt(fortune + 1), 1, 4);
+        // Java evaluates left to right; C++ leaves the order of + unspecified.
+        const int base = quantityDropped(random);
+        return MathHelper::clamp_int(base + random.nextInt(fortune + 1), 1, 4);
     }
     int quantityDropped(Random& random) const override { return 2 + random.nextInt(3); }
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::sandColor; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::glowstone_dust; }
 
 protected:
     void construct() override
@@ -43,7 +46,7 @@ public:
     MC_BLOCK_CLASS(BlockGravel)
 
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::stoneColor; }
-    // Java: getItemDropped gives flint with a fortune-dependent chance (items).
+    Item* getItemDropped(const IBlockState*, Random& rand, int fortune) const override;
 };
 
 class BlockHardenedClay : public Block {
@@ -75,7 +78,12 @@ public:
     }
 
     int quantityDropped(Random& random) const override { return 3 + random.nextInt(5); }
-    int quantityDroppedWithBonus(int fortune, Random& random) const override { return std::min(9, quantityDropped(random) + random.nextInt(1 + fortune)); }
+    int quantityDroppedWithBonus(int fortune, Random& random) const override
+    {
+        const int base = quantityDropped(random);
+        return std::min(9, base + random.nextInt(1 + fortune));
+    }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::melon; }
 
 protected:
     void construct() override
@@ -133,6 +141,7 @@ public:
     }
 
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::blackColor; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::obsidian); }
 
 protected:
     void construct() override
@@ -194,6 +203,7 @@ public:
     bool isOpaqueCube() const override { return false; }
     int getRenderType() const override { return 3; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
 };
 
 } // namespace mc

@@ -146,6 +146,7 @@ public:
             i |= 8;
         return i;
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
 
 protected:
     void construct() override

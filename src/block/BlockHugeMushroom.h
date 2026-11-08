@@ -55,6 +55,7 @@ public:
     }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(smallBlock); }
 
 protected:
     void construct() override

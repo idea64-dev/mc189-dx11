@@ -54,6 +54,7 @@ public:
         i = i | (state->getValue(DELAY) - 1) << 2;
         return i;
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::repeater; }
 
 protected:
     void construct() override
@@ -88,6 +89,7 @@ public:
             i |= 4;
         return i;
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::comparator; }
 
 protected:
     void construct() override

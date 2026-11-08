@@ -23,6 +23,7 @@ public:
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(AGE, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(AGE); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::reeds; }
 
 protected:
     void construct() override

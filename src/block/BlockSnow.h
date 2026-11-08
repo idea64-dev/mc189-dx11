@@ -23,6 +23,7 @@ public:
     int quantityDropped(Random&) const override { return 0; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(LAYERS, (meta & 7) + 1); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(LAYERS) - 1; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::snowball; }
 
 protected:
     void construct() override
@@ -49,6 +50,7 @@ public:
     }
 
     int quantityDropped(Random&) const override { return 4; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::snowball; }
 
 protected:
     void construct() override

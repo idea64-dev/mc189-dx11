@@ -146,6 +146,7 @@ public:
     virtual bool isCollidable() const { return true; }
     virtual bool canCollideCheck(const IBlockState* state, bool hitIfLiquid) const;
     virtual int quantityDropped(Random& random) const;
+    virtual Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const;
     virtual int damageDropped(const IBlockState* state) const;
     virtual float getExplosionResistance() const { return blockResistance / 5.0f; }
     virtual EnumWorldBlockLayer getBlockLayer() const { return EnumWorldBlockLayer::SOLID; }
@@ -159,8 +160,9 @@ public:
     virtual int getRenderColor(const IBlockState* state) const;
     virtual bool canProvidePower() const { return false; }
     virtual void setBlockBoundsForItemRender() { }
-    // Protected in Java; public here so the registry dump can compare it.
+    // Protected in Java; public here so the registry dump can compare them.
     virtual bool canSilkHarvest() const;
+    virtual ItemStack createStackedBlock(const IBlockState* state) const;
     virtual int quantityDroppedWithBonus(int fortune, Random& random) const;
     virtual bool canSpawnInBlock() const;
     std::string getLocalizedName() const;

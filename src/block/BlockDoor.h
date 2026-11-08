@@ -50,6 +50,7 @@ public:
         }
         return i;
     }
+    Item* getItemDropped(const IBlockState* state, Random&, int) const override { return state->getValue(HALF) == EnumDoorHalf::UPPER ? nullptr : getDoorItem(); }
 
 protected:
     void construct() override
@@ -58,6 +59,10 @@ protected:
         setDefaultState(blockState->getBaseState()->withProperty(FACING, EnumFacing::NORTH)->withProperty(OPEN, false)->withProperty(HINGE, EnumHingePosition::LEFT)->withProperty(POWERED, false)->withProperty(HALF, EnumDoorHalf::LOWER));
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &HALF, &FACING, &OPEN, &HINGE, &POWERED }); }
+
+private:
+    // Java: getItem() -- the door item of this door block.
+    Item* getDoorItem() const;
 };
 
 MC_ENUM_TRAITS(BlockDoor::EnumDoorHalf, 2, value == BlockDoor::EnumDoorHalf::UPPER ? "upper" : "lower")

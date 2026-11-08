@@ -39,6 +39,7 @@ public:
     bool isFlowerPot() const override { return true; }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(LEGACY_DATA); }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::flower_pot; }
 
 protected:
     void construct() override

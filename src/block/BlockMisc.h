@@ -64,6 +64,7 @@ public:
     int getMetaFromState(const IBlockState* state) const override { return static_cast<int>(state->getValue(TYPE)); }
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XYZ; }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 1, 3); }
+    Item* getItemDropped(const IBlockState*, Random& rand, int) const override;
 
 protected:
     void construct() override
@@ -170,6 +171,7 @@ public:
             i |= 8;
         return i;
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::string; }
 
 protected:
     void construct() override
@@ -260,6 +262,7 @@ public:
             i |= 8;
         return i;
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
 
 protected:
     void construct() override
@@ -329,6 +332,7 @@ public:
     bool isFullCube() const override { return false; }
     bool canSilkHarvest() const override { return true; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::string; }
 
 protected:
     void construct() override
@@ -406,6 +410,8 @@ public:
         , isOn(isOnIn)
     {
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::redstone_lamp); }
+    ItemStack createStackedBlock(const IBlockState*) const override { return ItemStack(Blocks::redstone_lamp); }
 
 protected:
     void construct() override
@@ -429,8 +435,15 @@ public:
     {
     }
 
-    int quantityDroppedWithBonus(int fortune, Random& random) const override { return quantityDropped(random) + random.nextInt(fortune + 1); }
+    int quantityDroppedWithBonus(int fortune, Random& random) const override
+    {
+        // Java evaluates left to right; C++ leaves the order of + unspecified.
+        const int base = quantityDropped(random);
+        return base + random.nextInt(fortune + 1);
+    }
     int quantityDropped(Random& random) const override { return 4 + random.nextInt(2); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::redstone; }
+    ItemStack createStackedBlock(const IBlockState*) const override { return ItemStack(Blocks::redstone_ore); }
 
 protected:
     void construct() override
@@ -456,10 +469,12 @@ public:
     int quantityDropped(Random& random) const override { return 2 + random.nextInt(2); }
     int quantityDroppedWithBonus(int fortune, Random& random) const override
     {
-        return MathHelper::clamp_int(quantityDropped(random) + random.nextInt(fortune + 1), 1, 5);
+        const int base = quantityDropped(random);
+        return MathHelper::clamp_int(base + random.nextInt(fortune + 1), 1, 5);
     }
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::quartzColor; }
     bool canSilkHarvest() const override { return true; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::prismarine_crystals; }
 
 protected:
     void construct() override

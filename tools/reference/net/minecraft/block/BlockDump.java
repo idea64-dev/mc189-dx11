@@ -17,6 +17,29 @@ import net.minecraft.block.properties.IProperty;
  */
 public class BlockDump {
 
+    static String itemName(net.minecraft.item.Item item) {
+        return item == null ? "null" : net.minecraft.item.Item.itemRegistry.getNameForObject(item).getResourcePath();
+    }
+
+    /**
+     * The silk touch stack, then quantity and item for fortune 0 and 3 with a fresh Random per seed 0..3 (the
+     * quantity is drawn first, as dropBlockAsItemWithChance does).
+     */
+    static String drops(Block block, IBlockState state) {
+        net.minecraft.item.ItemStack silk = block.createStackedBlock(state);
+        StringBuilder sb = new StringBuilder("silk=" + itemName(silk.getItem()) + ":" + silk.getItemDamage());
+        for (int fortune = 0; fortune <= 3; fortune += 3) {
+            sb.append(" f").append(fortune).append('=');
+            for (long seed = 0; seed < 4; seed++) {
+                java.util.Random rand = new java.util.Random(seed);
+                int quantity = block.quantityDroppedWithBonus(fortune, rand);
+                net.minecraft.item.Item item = block.getItemDropped(state, rand, fortune);
+                sb.append(seed == 0 ? "" : ",").append(quantity).append('*').append(itemName(item));
+            }
+        }
+        return sb.toString();
+    }
+
     static Map<Material, String> materialNames() throws Exception {
         Map<Material, String> names = new IdentityHashMap<Material, String>();
         for (Field f : Material.class.getFields()) {
@@ -62,6 +85,7 @@ public class BlockDump {
             for (IBlockState state : block.getBlockState().getValidStates()) {
                 out.println(" state " + state + " meta=" + block.getMetaFromState(state) + " id=" + Block.BLOCK_STATE_IDS.get(state) + " stateId=" + Block.getStateId(state)
                     + " map=" + block.getMapColor(state).colorIndex + " renderColor=" + block.getRenderColor(state) + " dropped=" + block.damageDropped(state));
+                out.println(" drops " + drops(block, state));
             }
             for (int meta = 0; meta < 16; meta++) {
                 String s;

@@ -28,6 +28,7 @@ public:
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(POWER, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(POWER); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::redstone; }
 
 protected:
     void construct() override

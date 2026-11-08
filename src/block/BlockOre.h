@@ -24,7 +24,8 @@ public:
 
     int quantityDropped(Random& random) const override { return this == Blocks::lapis_ore ? 4 + random.nextInt(5) : 1; }
     int damageDropped(const IBlockState*) const override { return this == Blocks::lapis_ore ? getDyeDamage(EnumDyeColor::BLUE) : 0; }
-    // Java: getItemDropped (coal, diamond, lapis, emerald, quartz) and the fortune bonus need items (stage 4 items).
+    Item* getItemDropped(const IBlockState*, Random&, int) const override;
+    int quantityDroppedWithBonus(int fortune, Random& random) const override;
 
 protected:
     void construct() override

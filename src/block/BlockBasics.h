@@ -5,6 +5,10 @@
 #include "block/Block.h"
 #include "core/EnumValues.h"
 #include "creativetab/CreativeTabs.h"
+#include "init/Blocks.h"
+#include "init/Items.h"
+#include "item/ItemStack.h"
+#include "util/Random.h"
 
 namespace mc {
 

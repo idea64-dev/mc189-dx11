@@ -114,6 +114,7 @@ public:
         if (item != Item::getItemFromBlock(Blocks::double_stone_slab))
             addSubBlocks(item, list, { 0, 1, 3, 4, 5, 6, 7 }); // all but WOOD
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::stone_slab); }
 
 protected:
     void construct() override
@@ -187,6 +188,7 @@ public:
         if (item != Item::getItemFromBlock(Blocks::double_stone_slab2))
             addSubBlocks(item, list, { 0 });
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::stone_slab2); }
 
 protected:
     void construct() override
@@ -254,6 +256,7 @@ public:
         if (item != Item::getItemFromBlock(Blocks::double_wooden_slab))
             addSubBlocks(item, list, 0, 6);
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::wooden_slab); }
 
 protected:
     void construct() override

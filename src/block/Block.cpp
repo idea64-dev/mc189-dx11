@@ -320,4 +320,18 @@ void Block::addSubBlocks(Item* item, std::vector<ItemStack>& list, int from, int
         list.emplace_back(item, 1, meta);
 }
 
+Item* Block::getItemDropped(const IBlockState*, Random&, int) const
+{
+    return Item::getItemFromBlock(this);
+}
+
+ItemStack Block::createStackedBlock(const IBlockState* state) const
+{
+    int i = 0;
+    Item* item = Item::getItemFromBlock(this);
+    if (item && item->getHasSubtypes())
+        i = getMetaFromState(state);
+    return ItemStack(item, 1, i);
+}
+
 } // namespace mc

@@ -23,6 +23,7 @@ public:
     int getRenderColor(const IBlockState*) const override { return getBlockColor(); }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT_MIPPED; }
     int getMetaFromState(const IBlockState*) const override { return 0; }
+    Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const override;
 
 protected:
     void construct() override
@@ -47,6 +48,7 @@ public:
     }
 
     int getMetaFromState(const IBlockState*) const override { return 0; }
+    Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const override;
 
 protected:
     void construct() override

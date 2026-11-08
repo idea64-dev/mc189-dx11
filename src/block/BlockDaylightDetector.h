@@ -29,6 +29,7 @@ public:
         if (!inverted)
             Block::getSubBlocks(item, tab, list);
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::daylight_detector); }
 
 protected:
     void construct() override

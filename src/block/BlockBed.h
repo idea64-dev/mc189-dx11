@@ -41,6 +41,7 @@ public:
         }
         return i;
     }
+    Item* getItemDropped(const IBlockState* state, Random&, int) const override { return state->getValue(PART) == EnumPartType::HEAD ? nullptr : Items::bed; }
 
 protected:
     void construct() override

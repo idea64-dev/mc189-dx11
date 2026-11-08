@@ -35,6 +35,7 @@ public:
     }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(AGE, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(AGE); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
 
 protected:
     void construct() override

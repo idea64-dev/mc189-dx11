@@ -14,6 +14,9 @@ public:
 
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(AGE, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(AGE); }
+    Item* getItemDropped(const IBlockState* state, Random&, int) const override { return state->getValue(AGE) == 7 ? getCrop() : getSeed(); }
+    virtual Item* getSeed() const;
+    virtual Item* getCrop() const;
 
 protected:
     void construct() override
@@ -34,13 +37,16 @@ protected:
 class BlockCarrot : public BlockCrops {
 public:
     MC_BLOCK_CLASS(BlockCarrot)
-    // Java: getSeed / getCrop are the carrot item (stage 4 items).
+    Item* getSeed() const override;
+    Item* getCrop() const override;
 };
 
 class BlockPotato : public BlockCrops {
 public:
     MC_BLOCK_CLASS(BlockPotato)
-    // Java: getSeed / getCrop are the potato item; a poisonous potato may drop (stage 9).
+    // Java: dropBlockAsItemWithChance adds a poisonous potato now and then (world drops, stage 9).
+    Item* getSeed() const override;
+    Item* getCrop() const override;
 };
 
 inline const PropertyInteger BlockCrops::AGE("age", 0, 7);

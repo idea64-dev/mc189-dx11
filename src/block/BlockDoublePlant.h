@@ -53,6 +53,7 @@ public:
     }
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XZ; }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 6); }
+    Item* getItemDropped(const IBlockState* state, Random& rand, int) const override;
 
 protected:
     void construct() override

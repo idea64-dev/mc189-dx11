@@ -16,6 +16,7 @@ public:
     }
 
     int quantityDropped(Random&) const override { return 3; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::book; }
 
 protected:
     void construct() override

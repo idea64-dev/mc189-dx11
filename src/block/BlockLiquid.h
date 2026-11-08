@@ -24,6 +24,7 @@ public:
     EnumWorldBlockLayer getBlockLayer() const override { return &blockMaterial == &Material::water ? EnumWorldBlockLayer::TRANSLUCENT : EnumWorldBlockLayer::SOLID; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(LEVEL, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(LEVEL); }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
 
 protected:
     void construct() override

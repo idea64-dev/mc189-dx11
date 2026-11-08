@@ -28,6 +28,7 @@ public:
     bool canSilkHarvest() const override { return true; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT_MIPPED; }
     int getMetaFromState(const IBlockState*) const override { return 0; }
+    Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const override { return !canDrop ? nullptr : Block::getItemDropped(state, rand, fortune); }
 
 protected:
     void construct() override

@@ -50,6 +50,7 @@ public:
             i |= 8;
         return i;
     }
+    ItemStack createStackedBlock(const IBlockState*) const override { return ItemStack(Item::getItemFromBlock(this), 1, 0); }
 
 protected:
     void construct() override
@@ -140,6 +141,7 @@ public:
     }
     int damageDropped(const IBlockState* state) const override { return BlockPlanks::getMetadata(state->getValue(VARIANT)); }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1, 2, 3 }); }
+    ItemStack createStackedBlock(const IBlockState* state) const override { return ItemStack(Item::getItemFromBlock(this), 1, BlockPlanks::getMetadata(state->getValue(VARIANT))); }
 
 protected:
     void construct() override
@@ -176,6 +178,7 @@ public:
     }
     int damageDropped(const IBlockState* state) const override { return BlockPlanks::getMetadata(state->getValue(VARIANT)) - 4; }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1 }); }
+    ItemStack createStackedBlock(const IBlockState* state) const override { return ItemStack(Item::getItemFromBlock(this), 1, BlockPlanks::getMetadata(state->getValue(VARIANT)) - 4); }
 
 protected:
     void construct() override

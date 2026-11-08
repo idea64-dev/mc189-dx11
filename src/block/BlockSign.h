@@ -16,6 +16,7 @@ public:
     bool isFullCube() const override { return false; }
     bool isOpaqueCube() const override { return false; }
     bool canSpawnInBlock() const override { return true; }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::sign; }
 
 protected:
     void construct() override

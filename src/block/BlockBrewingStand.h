@@ -41,6 +41,7 @@ public:
         }
         return i;
     }
+    Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::brewing_stand; }
 
 protected:
     void construct() override
