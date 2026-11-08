@@ -246,7 +246,13 @@ void SoundManager::playSound(const std::shared_ptr<ISound>& sound)
     const bool loop = sound->canRepeat() && sound->getRepeatDelay() == 0;
     AudioDevice::VoiceId voice = 0;
     try {
-        voice = sndSystem->play(loadBuffer(entry.getSoundPoolEntryLocation()), f2, pitch, loop);
+        if (entry.isStreamingSound()) {
+            // Music and records: paulscode's streaming source, decoded while it plays.
+            const std::shared_ptr<IResource> resource = resourceManager.getResource(entry.getSoundPoolEntryLocation());
+            voice = sndSystem->playStream(std::make_shared<const std::vector<uint8_t>>(resource->getInputStream()), f2, pitch, loop);
+        } else {
+            voice = sndSystem->play(loadBuffer(entry.getSoundPoolEntryLocation()), f2, pitch, loop);
+        }
     } catch (const std::exception& e) {
         Log::error("Error in class 'SoundManager': can't play {} ({})", entry.getSoundPoolEntryLocation().toString(), e.what());
         return;

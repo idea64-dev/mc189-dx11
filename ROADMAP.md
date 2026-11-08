@@ -129,7 +129,7 @@
 - [x] `Gui`: `drawRect`, `drawGradientRect`, `drawTexturedModalRect`, `drawCenteredString`, `drawModalRectWithCustomSizedTexture`, `drawScaledCustomSizeModalRect`
 - [x] `GuiScreen`: `initGui`, `drawScreen`, `updateScreen`, `actionPerformed`, `keyTyped`, `mouseClicked/Released/ClickMove`, `handleInput`, `onGuiClosed`, `drawDefaultBackground`, буфер обмена; экраны владеются через `shared_ptr` (дочерний экран держит родителя, как GC в Java)
 - [x] `GuiButton`, `GuiButtonLanguage`, `GuiErrorScreen`
-- [ ] `GuiTextField`, `GuiSlider`, `GuiOptionButton`, `GuiSlot`, `GuiYesNo` — вместе с экранами этапа 3
+- [x] `GuiOptionButton`, `GuiOptionSlider`, `GuiSlot`/`GuiListExtended`, `GuiYesNo` — сделаны в этапе 3; `GuiTextField` и `GuiSlider` — в этапе 5, с первыми экранами, которым они нужны
 - [x] `Minecraft::displayGuiScreen`, `setIngameFocus`/`setIngameNotInFocus`, ввод через `currentScreen->handleInput()`, `EntityRenderer` (ветка без мира + `setupOverlayRendering`), `MouseHelper`
 - [x] Звук: `SoundHandler`/`SoundManager` (`sounds.json`, веса вариантов, категории громкости), вывод через XAudio2 + stb_vorbis; щелчок кнопки `gui.button.press`
 
@@ -147,13 +147,16 @@
 
 ## Этап 3. Настройки и сопутствующие экраны
 
-- [ ] `GuiOptions`, `GuiVideoSettings` (только применимые к D3D11 пункты), `GuiControls` + `GuiKeyBindingList`, `GuiScreenOptionsSounds`, `GuiLanguage`, `ScreenChatOptions`, `GuiCustomizeSkin`, `GuiSnooper` (пустой)
-- [ ] `GuiScreenResourcePacks`: загрузка ресурспаков из папки `resourcepacks` (zip и папки), перезагрузка ресурсов
-- [ ] Полноценный `SoundHandler`/`SoundManager`: `sounds.json`, категории громкости, музыка в меню (`music.menu`)
-- [ ] Mipmap-уровни, анизотропия — как настройки
+- [x] `GuiOptions`, `GuiVideoSettings` (`GuiOptionsRowList`, все пункты оригинала, VBO считаются поддержанными), `GuiControls` + `GuiKeyBindingList` (переназначение, сброс, подсветка конфликтов, 20 мс глушения клавиши), `GuiScreenOptionsSounds`, `GuiLanguage`, `ScreenChatOptions`, `GuiCustomizeSkin`, `GuiSnooper`, `GuiStreamUnavailable` (Twitch мёртв — показывается то же, что ваниль показывает в офлайне)
+- [x] Арабский и иврит: `FontRenderer.bidiReorder` через ICU из Windows (`icu.dll`) — те же `ArabicShaping` + `Bidi`, что в ICU4J
+- [x] Chat-компоненты (`IChatComponent` + JSON, `ChatStyle`, перевод через `StatCollector`) — нужны для описаний паков; события клика/наведения — с чатом (этап 8)
+- [x] `GuiScreenResourcePacks`: `ResourcePackRepository`, zip- и папочные паки (`FileResourcePack`, `FolderResourcePack`), `pack.mcmeta` с описанием-компонентом, иконки, несовместимые паки с подтверждением, перезагрузка ресурсов; `--resourcePackDir`. Из нестрогого JSON Gson поддержаны только комментарии. Серверные паки — с мультиплеером (этап 14)
+- [x] `PlayerUsageSnooper` локально, ничего не отправляет (snoop.minecraft.net мёртв): статистика клиента и простаивающего встроенного сервера, как в ванили; вместо ~150 флагов `gl_caps[...]` — сведения об адаптере D3D11
+- [x] Музыка: `MusicTicker` (`music.menu` в меню, задержки и рандом как в оригинале), потоковое воспроизведение (`stream: true` в `sounds.json`) — декодирование на фоновом потоке по мере проигрывания; громкость по категориям применяется к играющим звукам (с запаздыванием на шаг для не-master, как в Java)
+- [x] Mipmap-уровни — ползунок в настройках видео, сохраняется; сами мипмапы атласа — в этапе 7. Анизотропной фильтрации в 1.8.9 нет (убрана в 1.8)
 - [x] Скриншоты по F2 (`ScreenShotHelper`, PNG в `screenshots/`); сообщение в чат — с чатом
 
-**Готово, когда:** все настройки меняются, сохраняются в `options.txt` и переживают перезапуск; ресурспак меняет текстуры меню.
+**Готово, когда:** все настройки меняются, сохраняются в `options.txt` и переживают перезапуск; ресурспак меняет текстуры меню. — **выполнено**: все экраны настроек совпадают с кадрами настоящего клиента попиксельно, включая список языков с арабским (сценарий `tools/scenarios/options.txt`, отличается только снупер — значениями конкретной машины). Сценарий с ресурспаками (`tools/scenarios/resourcepacks.txt`: выбор несовместимого пака с подтверждением, выбор zip-пака, перезагрузка с новым фоном меню) совпадает попиксельно, `options.txt` после него побайтно равен ванильному.
 
 ## Этап 4. Базовые игровые данные
 
@@ -167,6 +170,7 @@
 - [ ] `Chunk`, `ExtendedBlockStorage`, `NibbleArray`, хранение блок-стейтов
 - [ ] Формат Anvil: `RegionFile`, `AnvilChunkLoader` — **открываем существующие сейвы 1.8.9**
 - [ ] `WorldInfo`/`level.dat`, `SaveFormat`, `GuiSelectWorld`, `GuiCreateWorld` (включая customized-пресеты)
+- [ ] Виджеты для них: `GuiTextField` (имя мира, сид), `GuiSlider` и `GuiPageButtonList` (customized)
 - [ ] Движок освещения (sky light + block light, `checkLight`)
 
 ## Этап 6. Генерация мира (бит в бит с Java)

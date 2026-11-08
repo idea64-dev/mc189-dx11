@@ -6,11 +6,14 @@
 #include "client/resources/ResourceIndex.h"
 #include "core/Sha1.h"
 #include "core/ZipArchive.h"
+#include "platform/AudioDevice.h"
 
 #include <doctest/doctest.h>
 
+#include <chrono>
 #include <memory>
 #include <optional>
+#include <thread>
 
 using namespace mc;
 
@@ -89,4 +92,29 @@ TEST_CASE("palette PNGs decode like ImageIO")
     }
     CHECK(sawTransparent);
     CHECK(sawOpaqueWhite);
+}
+
+TEST_CASE("menu music streams through XAudio2")
+{
+    if (!installation()) {
+        MESSAGE("Minecraft 1.8.9 not installed, skipping");
+        return;
+    }
+    AudioDevice device;
+    if (!device.isAvailable()) {
+        MESSAGE("no audio device, skipping");
+        return;
+    }
+    const auto pack = defaultPack();
+    const auto music = pack->getInputStreamAssets(ResourceLocation("sounds/music/menu/menu1.ogg"));
+    REQUIRE(music);
+
+    const AudioDevice::VoiceId voice = device.playStream(std::make_shared<const std::vector<uint8_t>>(*music), 0.0f, 1.0f, false);
+    REQUIRE(voice != 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(400)); // longer than the queued chunks at start
+    device.update();
+    CHECK(device.isPlaying(voice));
+    device.stop(voice);
+    CHECK_FALSE(device.isPlaying(voice));
+    CHECK_THROWS(device.playStream(std::make_shared<const std::vector<uint8_t>>(std::vector<uint8_t> { 1, 2, 3 }), 1.0f, 1.0f, false));
 }

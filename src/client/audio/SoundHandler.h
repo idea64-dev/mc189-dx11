@@ -2,7 +2,7 @@
 
 // Original: net/minecraft/client/audio/SoundHandler.java, SoundManager.java, SoundList.java (+ serializer),
 // SoundRegistry.java. Output goes through platform/AudioDevice (XAudio2) instead of paulscode + OpenAL.
-// Not ported yet: listener position and 3D attenuation (stage 13), streaming music, ITickableSound.
+// Not ported yet: listener position and 3D attenuation (stage 13), ITickableSound.
 
 #include "client/audio/Sound.h"
 #include "client/resources/IResourceManager.h"

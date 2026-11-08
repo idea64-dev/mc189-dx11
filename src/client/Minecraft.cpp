@@ -182,7 +182,7 @@ void Minecraft::startGame()
     // Java: skinManager, saveLoader (stage 5)
     mcSoundHandler = std::make_unique<SoundHandler>(*mcResourceManager, *gameSettings);
     mcResourceManager->registerReloadListener(*mcSoundHandler);
-    // Java: mcMusicTicker (stage 3)
+    mcMusicTicker = std::make_unique<MusicTicker>(*this);
 
     fontRendererObj = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii.png"), *renderEngine, false);
     if (!gameSettings->language.empty()) {
@@ -473,7 +473,7 @@ void Minecraft::runTick()
     }
 
     if (!isGamePaused) {
-        // Java: mcMusicTicker.update() (stage 3)
+        mcMusicTicker->update();
         mcSoundHandler->update();
     }
     // Java: world ticking (stage 9)
@@ -649,6 +649,7 @@ void Minecraft::shutdownMinecraftApplet()
     standardGalacticFontRenderer.reset();
     renderEngine.reset();
     framebufferMc.reset();
+    mcMusicTicker.reset();
     mcSoundHandler.reset();
     mcResourceManager.reset();
     if (Display::isCreated())

@@ -5,6 +5,7 @@
 // resizing, fullscreen, screenshots and frame limiting. World, player, networking and the integrated server
 // arrive in later ROADMAP stages; their call sites are noted inline.
 
+#include "client/audio/MusicTicker.h"
 #include "client/main/GameConfiguration.h"
 #include "client/settings/GameSettings.h"
 #include "profiler/PlayerUsageSnooper.h"
@@ -68,6 +69,9 @@ public:
     Framebuffer& getFramebuffer() { return *framebufferMc; }
     LanguageManager& getLanguageManager() { return *mcLanguageManager; }
     SoundHandler& getSoundHandler() { return *mcSoundHandler; }
+    MusicTicker& getMusicTicker() { return *mcMusicTicker; }
+    // Java: the player's dimension and game mode pick the music once a world exists (stage 9).
+    MusicTicker::MusicType getAmbientMusicType() const { return MusicTicker::MusicType::MENU; }
     ResourcePackRepository& getResourcePackRepository() { return *mcResourcePackRepository; }
     PlayerUsageSnooper& getPlayerUsageSnooper() { return *usageSnooper; }
     // Java: getIntegratedServer().getPlayerUsageSnooper(). Vanilla creates an idle IntegratedServer at startup,
@@ -133,6 +137,7 @@ private:
     std::unique_ptr<LanguageManager> mcLanguageManager;
     std::unique_ptr<TextureManager> renderEngine;
     std::unique_ptr<SoundHandler> mcSoundHandler;
+    std::unique_ptr<MusicTicker> mcMusicTicker;
     std::unique_ptr<EntityRenderer> entityRenderer;
     std::unique_ptr<Framebuffer> framebufferMc;
     std::optional<ResourceLocation> mojangLogo;
