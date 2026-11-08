@@ -131,7 +131,7 @@ public:
 
     bool isBlockNormalCube() const;
     bool isNormalCube() const;
-    bool isVisuallyOpaque() const;
+    virtual bool isVisuallyOpaque() const;
     virtual bool isFullCube() const { return true; }
     virtual int getRenderType() const { return 3; }
     // The hardness field; Java reads it through getBlockHardness(world, pos), which some blocks override.
@@ -164,7 +164,7 @@ public:
     virtual std::string getUnlocalizedName() const;
     bool getEnableStats() const { return enableStats; }
     virtual int getMobilityFlag() const;
-    float getAmbientOcclusionLightValue() const;
+    virtual float getAmbientOcclusionLightValue() const;
     const CreativeTabs* getCreativeTabToDisplayOn() const { return displayOnCreativeTab; }
     virtual bool isFlowerPot() const { return false; }
     virtual bool requiresUpdates() const { return true; }
@@ -224,7 +224,8 @@ private:
 
     const CreativeTabs* displayOnCreativeTab = nullptr;
     const IBlockState* defaultBlockState = nullptr;
-    std::string unlocalizedName;
+    // Java's null: blocks registered without a name show "tile.null".
+    std::string unlocalizedName = "null";
 };
 
 } // namespace mc
