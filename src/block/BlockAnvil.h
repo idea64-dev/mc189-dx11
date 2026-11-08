@@ -1,6 +1,6 @@
 #pragma once
 
-// Original: net/minecraft/block/BlockAnvil.java (the Anvil interaction object comes with containers, stage 10)
+// Original: net/minecraft/block/BlockAnvil.java (the Anvil interaction object comes with containers, stage 11)
 
 #include "block/BlockFalling.h"
 

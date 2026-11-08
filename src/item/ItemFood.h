@@ -3,7 +3,7 @@
 // Original: net/minecraft/item/ItemFood.java, ItemAppleGold.java, ItemFishFood.java, ItemSoup.java,
 // ItemSeedFood.java and ItemSeeds.java.
 // Not ported yet: eating and planting (onItemRightClick, onItemUseFinish, onFoodEaten, onItemUse) -- they need the
-// player's food stats and the world (stages 5 and 9).
+// player and its food stats (stages 8 and 12).
 
 #include "item/Item.h"
 
@@ -139,7 +139,7 @@ public:
     }
 
 private:
-    // Planting (stage 5).
+    // Planting (stage 8).
     [[maybe_unused]] Block* crops;
     [[maybe_unused]] Block* soilId;
 };
@@ -151,7 +151,7 @@ public:
     ItemSeeds(Block* cropsIn, Block* soil);
 
 private:
-    // Planting (stage 5).
+    // Planting (stage 8).
     [[maybe_unused]] Block* crops;
     [[maybe_unused]] Block* soilBlockID;
 };

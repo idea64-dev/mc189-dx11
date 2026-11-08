@@ -1,7 +1,8 @@
 #pragma once
 
 // Original: net/minecraft/entity/EntityList.java -- so far only the name/id table and the spawn egg colors.
-// Creating entities by name, id or NBT comes with the entities (stage 9); the egg kill statistics with StatList.
+// Creating entities by name, id or NBT comes with the entities (stage 10); the egg kill statistics with
+// StatList (stage 12).
 
 #include <optional>
 #include <string>

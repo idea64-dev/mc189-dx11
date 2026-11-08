@@ -1,6 +1,6 @@
 #pragma once
 
-// Original: net/minecraft/block/BlockSkull.java (the wither pattern comes with entities, stage 11)
+// Original: net/minecraft/block/BlockSkull.java (the wither pattern comes with entities, stage 10)
 
 #include "block/BlockContainer.h"
 

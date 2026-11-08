@@ -71,7 +71,7 @@ public:
     bool hasEffect() const { return item->hasEffect(*this); }
     EnumRarity getRarity() const { return item->getRarity(*this); }
     bool isItemEnchantable() const { return item->isItemTool(*this) && !isItemEnchanted(); }
-    // Java: addEnchantment(Enchantment, level) -- with the enchantment table (stage 10).
+    // Java: addEnchantment(Enchantment, level) -- with enchantments (stage 12).
     void addEnchantment(int effectId, int level);
     bool isItemEnchanted() const;
     void setTagInfo(const std::string& key, std::shared_ptr<NBTBase> value);

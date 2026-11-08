@@ -2,7 +2,7 @@
 
 // Original: net/minecraft/item/ItemPotion.java
 // Not ported yet: drinking and throwing (onItemRightClick, onItemUseFinish) and the effect tooltips
-// (addInformation) -- stages 9 and 10.
+// (addInformation) -- stages 12 and 11.
 
 #include "item/Item.h"
 #include "potion/Potion.h"

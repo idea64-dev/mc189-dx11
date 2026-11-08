@@ -3,7 +3,7 @@
 // Original: net/minecraft/potion/Potion.java with PotionHealth, PotionAttackDamage, PotionHealthBoost and
 // PotionAbsorption, and net/minecraft/potion/PotionEffect.java.
 // Ported so far: the potion table and effect data. performEffect/affectEntity, isReady and the attribute
-// modifiers act on living entities and come with them (stage 9).
+// modifiers act on living entities and come with potion effects (stage 12).
 
 #include "util/ResourceLocation.h"
 
@@ -74,7 +74,7 @@ public:
     void setSplashPotion(bool splashPotion) { isSplashPotion = splashPotion; }
     bool getIsAmbient() const { return isAmbient; }
     bool getIsShowParticles() const { return showParticles; }
-    // Java: onUpdate(EntityLivingBase) and performEffect -- stage 9.
+    // Java: onUpdate(EntityLivingBase) and performEffect -- stage 12.
     std::string getEffectName() const { return Potion::potionTypes[static_cast<size_t>(potionID)]->getName(); }
     int hashCode() const { return potionID; }
     std::string toString() const;

@@ -1,6 +1,6 @@
 #pragma once
 
-// Original: net/minecraft/block/BlockSilverfish.java (getModelBlock comes with the silverfish, stage 11)
+// Original: net/minecraft/block/BlockSilverfish.java (getModelBlock comes with the silverfish, stage 10)
 
 #include "block/BlockBasics.h"
 

@@ -2,8 +2,8 @@
 
 // Original: net/minecraft/item/ItemTool.java, ItemSpade.java, ItemPickaxe.java, ItemAxe.java, ItemSword.java,
 // ItemHoe.java and ItemShears.java.
-// Not ported yet: hitEntity / onBlockDestroyed (damage the tool, stage 9), ItemSword.onItemRightClick (blocking),
-// ItemHoe.onItemUse (tilling, stage 5) and the attack damage attribute modifiers (stage 9).
+// Not ported yet: hitEntity / onBlockDestroyed (damage the tool, stage 8), ItemSword.onItemRightClick (blocking),
+// ItemHoe.onItemUse (tilling, stage 8) and the attack damage attribute modifiers (entity attributes, stage 10).
 
 #include "item/Item.h"
 
@@ -81,7 +81,7 @@ public:
     bool getIsRepairable(const ItemStack& toRepair, const ItemStack& repair) const override;
 
 private:
-    [[maybe_unused]] float attackDamage; // attribute modifiers (stage 9)
+    [[maybe_unused]] float attackDamage; // attribute modifiers (stage 10)
     const ToolMaterial& material;
 };
 

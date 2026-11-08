@@ -2,8 +2,8 @@
 
 // Original: net/minecraft/item/ItemBlock.java and its subclasses ItemMultiTexture, ItemColored, ItemCloth,
 // ItemSlab, ItemLeaves, ItemPiston, ItemSnow, ItemLilyPad, ItemAnvilBlock, ItemDoublePlant and ItemBanner.
-// Not ported yet: onItemUse / canPlaceBlockOnSide / setTileEntityNBT / tryPlace (block placement, stage 5)
-// and ItemBanner.addInformation (tooltips, stage 10).
+// Not ported yet: onItemUse / canPlaceBlockOnSide / setTileEntityNBT / tryPlace (block placement, stage 8)
+// and ItemBanner.addInformation (tooltips, stage 11).
 
 #include "item/Item.h"
 
@@ -127,7 +127,7 @@ public:
 
 private:
     BlockSlab* const singleSlab;
-    [[maybe_unused]] BlockSlab* const doubleSlab; // placement (stage 5)
+    [[maybe_unused]] BlockSlab* const doubleSlab; // placement (stage 8)
 };
 
 class ItemLeaves : public ItemBlock {

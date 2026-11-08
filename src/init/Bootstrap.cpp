@@ -17,7 +17,7 @@ void Bootstrap::registerAll()
     // Java: BlockFire.init() -- with fire spreading (stage 9).
     Item::registerItems();
     Items::init();
-    // Java: StatList.init() and the dispenser behaviours -- with statistics and the dispenser (stages 9 and 10).
+    // Java: StatList.init() and the dispenser behaviours -- with statistics and the dispenser (stages 12 and 9).
 }
 
 } // namespace mc

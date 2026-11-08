@@ -5,7 +5,7 @@
 // stack limits, damage, names, colors, use actions, rarity, sub-items and tool speeds. The Java callbacks that
 // act on the world (onItemUse, onItemRightClick, onItemUseFinish, onPlayerStoppedUsing, onUpdate, onCreated,
 // hitEntity, onBlockDestroyed, itemInteractionForEntity, addInformation, getItemAttributeModifiers,
-// getMovingObjectPositionFromPlayer) come with the world, entities and the inventory screens (stages 5, 9, 10).
+// getMovingObjectPositionFromPlayer) come with the player, world ticks, entities, the inventory screens and the game systems (stages 8 to 12).
 //
 // Unlike blocks, item constructors make no virtual calls, so items are built in one step. They are owned by
 // Item::create (registration) and live for the rest of the program.

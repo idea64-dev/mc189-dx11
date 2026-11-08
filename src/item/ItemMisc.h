@@ -7,7 +7,7 @@
 // ItemArmorStand, ItemMonsterPlacer, ItemSkull, ItemFirework, ItemFireworkCharge, ItemEnchantedBook, ItemDye,
 // ItemCoal, ItemRecord, ItemSimpleFoiled, ItemExpBottle, ItemEditableBook and ItemWritableBook.
 // What they do in the world -- placing, throwing, spawning, filling, shooting, map updates, bonemeal, book
-// editing, tooltips -- comes with the world, entities and screens (stages 5, 9 and 10). Constructor arguments
+// editing, tooltips -- comes with the player, world ticks, entities, screens and game systems (stages 8 to 12). Constructor arguments
 // those need are kept.
 
 #include "item/Item.h"
@@ -307,7 +307,7 @@ public:
     EnumRarity getRarity(const ItemStack& stack) const override;
     // The StoredEnchantments list, a new empty list when absent.
     std::shared_ptr<NBTTagList> getEnchantments(const ItemStack& stack) const;
-    // Java: addEnchantment, getEnchantedItemStack, getAll and getRandom -- with enchantments (stage 10).
+    // Java: addEnchantment, getEnchantedItemStack, getAll and getRandom -- with enchantments (stage 12).
 };
 
 class ItemDye : public Item {

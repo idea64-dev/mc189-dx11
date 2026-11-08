@@ -194,7 +194,7 @@ void Minecraft::startGame()
     standardGalacticFontRenderer = std::make_unique<FontRenderer>(*gameSettings, ResourceLocation("textures/font/ascii_sga.png"), *renderEngine, false);
     mcResourceManager->registerReloadListener(*fontRendererObj);
     mcResourceManager->registerReloadListener(*standardGalacticFontRenderer);
-    // Java: GrassColorReloadListener, FoliageColorReloadListener, AchievementList, mouseHelper (stage 4+)
+    // Java: GrassColorReloadListener, FoliageColorReloadListener (stage 7), AchievementList (stage 12); mouseHelper is a member
 
     DxStateManager::enableTexture2D();
     DxStateManager::shadeModel(7425);

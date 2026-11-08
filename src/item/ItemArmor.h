@@ -1,7 +1,7 @@
 #pragma once
 
 // Original: net/minecraft/item/ItemArmor.java (with ItemArmor.ArmorMaterial).
-// Not ported yet: onItemRightClick (equipping, stage 9) and the dispenser behavior the constructor registers
+// Not ported yet: onItemRightClick (equipping, stage 8) and the dispenser behavior the constructor registers
 // (BlockDispenser.dispenseBehaviorRegistry, with the dispenser tile entity in stage 9).
 
 #include "item/Item.h"
