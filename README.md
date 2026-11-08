@@ -54,6 +54,12 @@ powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: з
 `tests\reference\JavaReference.inc` и `src\util\MathHelperTables.inc`. Тесты сверяют C++ с ними побитово.
 Тесты ресурсов используют установленный Minecraft и пропускаются, если его нет.
 
+Эталоны из самого игрового кода: `tools\reference\compile_mcp.ps1` один раз компилирует весь исходник MCP
+(`javac --release 8` и библиотеки из установки лаунчера) в `%TEMP%\mcdx11-mcp`, затем
+`tools\reference\generate_game.ps1` запускает на Java 8 генераторы из `tools\reference\` и пишет в
+`tests\reference\` эталоны NBT и математики, `blocks.txt` (каждый блок и каждое состояние, включая дропы) и
+`items.txt` (каждый предмет с подпредметами креатива). Тесты реестров сравнивают с ними построчно.
+
 Сравнение с оригиналом по кадрам: `tools/reference/run_vanilla.ps1 -Output run/vanilla_menu.png` запускает
 настоящий клиент 1.8.9 из установки (Java 8, офлайн, отдельная папка `run_vanilla/`) и сохраняет снимок по F2;
 `python tools/compare_screens.py run/vanilla_menu.png run/smoke_1_start.png` сравнивает его с кадром порта.
@@ -72,7 +78,12 @@ src/            исходники; подкаталоги повторяют п
   platform/     замена LWJGL 2: Display (окно), Keyboard, Mouse, Sys
   render/       Direct3D 11: устройство, swapchain, эмуляция OpenGL 1.x (render/gl)
   client/       Minecraft, main, settings, resources, renderer (DxStateManager, Tessellator, текстуры), shader, gui
-  util/         Timer, MathHelper, Random (java.util.Random), ResourceLocation, ScreenShotHelper
+  util/         Timer, MathHelper, Random (java.util.Random), ResourceLocation, BlockPos, Vec3/AABB, реестры
+  nbt/          NBT-теги, сжатый формат, JsonToNBT
+  block/        все блоки, свойства и состояния, материалы
+  item/         все предметы, ItemStack
+  potion/       зелья и язык варки PotionHelper
+  init/         Bootstrap, Blocks, Items
 shaders/        HLSL фиксированного конвейера, компилируется fxc при сборке
 tests/          doctest-тесты; reference/ — эталоны, снятые на Java
 tools/          smoke-тест окна; reference/ — генератор эталонов на Java

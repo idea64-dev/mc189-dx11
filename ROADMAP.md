@@ -160,10 +160,16 @@
 
 ## Этап 4. Базовые игровые данные
 
-- [ ] NBT (`nbt/*`): все теги, чтение/запись, сжатый формат
-- [ ] Математика: `BlockPos`, `Vec3`, `AxisAlignedBB`, `EnumFacing`, `MovingObjectPosition`
-- [ ] Реестры: `Block` (~200 блоков), `BlockState`/`IProperty`, `Item`, `Bootstrap`
-- [ ] `Material`, `MapColor`, `SoundType`, `CreativeTabs`
+- [x] NBT (`nbt/*`): все теги, чтение/запись, сжатый формат, `JsonToNBT`
+- [x] Математика: `BlockPos`, `Vec3`, `AxisAlignedBB`, `EnumFacing`, `MovingObjectPosition`
+- [x] Реестры: `Block` (198 блоков), `BlockState`/`IProperty`, `Item` (337 предметов), `ItemStack`, `Bootstrap`
+- [x] `Material`, `MapColor`, `SoundType`, `CreativeTabs`
+- [x] Дропы блоков (`getItemDropped`, `quantityDroppedWithBonus`, `createStackedBlock`), подпредметы креатива
+- [x] Таблицы зелий (`Potion`, `PotionHelper`), имена и цвета яиц `EntityList`
+
+**Сделано:** всё, что не требует мира, сверено построчно с дампами, которые пишет скомпилированный код MCP
+(`tools/reference/compile_mcp.ps1` + `generate_game.ps1`). Колбэки предметов и блоков, которым нужен мир, игрок
+или сущности, перенесутся на своих этапах — в коде у каждого стоит комментарий с номером этапа.
 
 ## Этап 5. Мир и чанки
 
