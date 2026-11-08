@@ -32,6 +32,7 @@ std::string toString(T value)
 
 // Integer.parseInt / Float.parseFloat: throw std::invalid_argument (NumberFormatException) on bad input.
 int32_t parseInt(std::string_view text);
+int64_t parseLong(std::string_view text);
 float parseFloat(std::string_view text);
 double parseDouble(std::string_view text);
 

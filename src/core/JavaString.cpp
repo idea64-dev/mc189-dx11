@@ -104,6 +104,21 @@ int32_t parseInt(std::string_view text)
     return value;
 }
 
+int64_t parseLong(std::string_view text)
+{
+    std::string_view digits = text;
+    if (!digits.empty() && digits.front() == '+')
+        digits.remove_prefix(1);
+    if (digits.empty() || digits.front() == '+' || (digits.front() == '-' && digits.size() == 1))
+        throw std::invalid_argument("For input string: \"" + std::string(text) + "\"");
+
+    int64_t value = 0;
+    const auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value, 10);
+    if (result.ec != std::errc() || result.ptr != digits.data() + digits.size())
+        throw std::invalid_argument("For input string: \"" + std::string(text) + "\"");
+    return value;
+}
+
 double parseDouble(std::string_view text)
 {
     std::string_view s = trimJava(text);
