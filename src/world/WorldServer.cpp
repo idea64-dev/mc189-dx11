@@ -409,6 +409,7 @@ void WorldServer::updateBlockTick(const BlockPos& pos, Block* blockIn, int delay
         if (!pendingTickListEntriesHashSet.contains(nextticklistentry)) {
             pendingTickListEntriesHashSet.insert(nextticklistentry);
             pendingTickListEntriesTreeSet.insert(nextticklistentry);
+            indexPendingTick(nextticklistentry, true);
         }
     }
 }
@@ -424,6 +425,7 @@ void WorldServer::scheduleBlockUpdate(const BlockPos& pos, Block* blockIn, int d
     if (!pendingTickListEntriesHashSet.contains(nextticklistentry)) {
         pendingTickListEntriesHashSet.insert(nextticklistentry);
         pendingTickListEntriesTreeSet.insert(nextticklistentry);
+        indexPendingTick(nextticklistentry, true);
     }
 }
 
@@ -458,6 +460,7 @@ bool WorldServer::tickUpdates(bool runAllPending)
         if (!runAllPending && nextticklistentry.scheduledTime > worldInfo->getWorldTotalTime())
             break;
         pendingTickListEntriesTreeSet.erase(pendingTickListEntriesTreeSet.begin());
+        indexPendingTick(nextticklistentry, false);
         pendingTickListEntriesHashSet.erase(nextticklistentry);
         pendingTickListEntriesThisTick.push_back(nextticklistentry);
     }
@@ -495,6 +498,18 @@ std::vector<NextTickListEntry> WorldServer::getPendingBlockUpdates(Chunk* chunkI
     return func_175712_a(i, k, j, l, remove);
 }
 
+void WorldServer::indexPendingTick(const NextTickListEntry& entry, bool add)
+{
+    const int64_t key = ChunkCoordIntPair::chunkXZ2Int(entry.position.getX() >> 4, entry.position.getZ() >> 4);
+    if (add) {
+        pendingTicksByChunk[key].insert(entry);
+    } else if (const auto it = pendingTicksByChunk.find(key); it != pendingTicksByChunk.end()) {
+        it->second.erase(entry);
+        if (it->second.empty())
+            pendingTicksByChunk.erase(it);
+    }
+}
+
 std::vector<NextTickListEntry> WorldServer::func_175712_a(int minX, int minZ, int maxX, int maxZ, bool remove)
 {
     std::vector<NextTickListEntry> list;
@@ -503,16 +518,38 @@ std::vector<NextTickListEntry> WorldServer::func_175712_a(int minX, int minZ, in
         return blockpos.getX() >= minX && blockpos.getX() < maxX && blockpos.getZ() >= minZ && blockpos.getZ() < maxZ;
     };
 
-    for (auto it = pendingTickListEntriesTreeSet.begin(); it != pendingTickListEntriesTreeSet.end();) {
-        if (inside(*it)) {
-            list.push_back(*it);
-            if (remove) {
-                pendingTickListEntriesHashSet.erase(*it);
-                it = pendingTickListEntriesTreeSet.erase(it);
-                continue;
-            }
+    // Java walks the whole tree set; the entries of the chunks the area touches, in the set's order, are the
+    // same ones.
+    std::vector<NextTickListEntry> found;
+    const auto collect = [&](const std::set<NextTickListEntry>& entries) {
+        for (const NextTickListEntry& entry : entries) {
+            if (inside(entry))
+                found.push_back(entry);
         }
-        ++it;
+    };
+    if (maxX > minX && maxZ > minZ) {
+        const int64_t chunksX = static_cast<int64_t>((maxX - 1) >> 4) - (minX >> 4) + 1;
+        const int64_t chunksZ = static_cast<int64_t>((maxZ - 1) >> 4) - (minZ >> 4) + 1;
+        if (chunksX * chunksZ <= static_cast<int64_t>(pendingTicksByChunk.size())) {
+            for (int cx = minX >> 4; cx <= (maxX - 1) >> 4; ++cx) {
+                for (int cz = minZ >> 4; cz <= (maxZ - 1) >> 4; ++cz) {
+                    if (const auto it = pendingTicksByChunk.find(ChunkCoordIntPair::chunkXZ2Int(cx, cz)); it != pendingTicksByChunk.end())
+                        collect(it->second);
+                }
+            }
+        } else {
+            for (const auto& [key, entries] : pendingTicksByChunk)
+                collect(entries);
+        }
+    }
+    std::sort(found.begin(), found.end());
+    for (const NextTickListEntry& entry : found) {
+        list.push_back(entry);
+        if (remove) {
+            pendingTickListEntriesHashSet.erase(entry);
+            pendingTickListEntriesTreeSet.erase(entry);
+            indexPendingTick(entry, false);
+        }
     }
 
     for (auto it = pendingTickListEntriesThisTick.begin(); it != pendingTickListEntriesThisTick.end();) {

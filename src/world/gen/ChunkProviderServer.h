@@ -6,6 +6,7 @@
 #include "core/JavaHashMap.h"
 #include "world/chunk/IChunkProvider.h"
 
+#include <array>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -45,6 +46,8 @@ public:
     bool chunkLoadOverride = true;
 
 private:
+    // The loaded chunk (the dummy one for a null entry), or null when the position is not loaded.
+    Chunk* findLoaded(int x, int z);
     std::unique_ptr<Chunk> loadChunkFromFile(int x, int z);
     void saveChunkExtraData(Chunk* chunkIn);
     void saveChunkData(Chunk* chunkIn);
@@ -56,6 +59,13 @@ private:
     std::unique_ptr<IChunkLoader> chunkLoader;
     // Java: a LongHashMap, never iterated.
     std::unordered_map<int64_t, std::unique_ptr<Chunk>> id2ChunkMap;
+    // In front of id2ChunkMap: block access and lighting stay within a few chunks, so most lookups hit here.
+    // Cleared when chunks unload.
+    struct CachedChunk {
+        int64_t key = 0;
+        Chunk* chunk = nullptr;
+    };
+    std::array<CachedChunk, 64> chunkCache {};
     std::vector<Chunk*> loadedChunks;
     WorldServer* worldObj;
 };

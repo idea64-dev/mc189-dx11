@@ -23,7 +23,7 @@ ChunkProviderServer::~ChunkProviderServer() = default;
 
 bool ChunkProviderServer::chunkExists(int x, int z)
 {
-    return id2ChunkMap.contains(ChunkCoordIntPair::chunkXZ2Int(x, z));
+    return findLoaded(x, z) != nullptr;
 }
 
 void ChunkProviderServer::dropChunk(int x, int z)
@@ -74,10 +74,24 @@ Chunk* ChunkProviderServer::loadChunk(int chunkX, int chunkZ)
     return chunk;
 }
 
+Chunk* ChunkProviderServer::findLoaded(int x, int z)
+{
+    const int64_t key = ChunkCoordIntPair::chunkXZ2Int(x, z);
+    CachedChunk& cached = chunkCache[static_cast<size_t>((x & 7) | ((z & 7) << 3))];
+    if (cached.chunk && cached.key == key)
+        return cached.chunk;
+    const auto it = id2ChunkMap.find(key);
+    if (it == id2ChunkMap.end())
+        return nullptr;
+    cached.key = key;
+    cached.chunk = it->second ? it->second.get() : dummyChunk.get();
+    return cached.chunk;
+}
+
 Chunk* ChunkProviderServer::provideChunk(int x, int z)
 {
-    if (const auto it = id2ChunkMap.find(ChunkCoordIntPair::chunkXZ2Int(x, z)); it != id2ChunkMap.end())
-        return it->second ? it->second.get() : dummyChunk.get();
+    if (Chunk* chunk = findLoaded(x, z))
+        return chunk;
     return !worldObj->isFindingSpawnPoint() && !chunkLoadOverride ? dummyChunk.get() : loadChunk(x, z);
 }
 
@@ -187,6 +201,7 @@ bool ChunkProviderServer::unloadQueuedChunks()
                     if (const auto pos = std::find(loadedChunks.begin(), loadedChunks.end(), chunk); pos != loadedChunks.end())
                         loadedChunks.erase(pos);
                     id2ChunkMap.erase(it);
+                    chunkCache.fill({});
                 }
                 droppedChunksSet.erase(key);
             }

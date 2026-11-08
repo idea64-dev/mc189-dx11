@@ -148,6 +148,9 @@ private:
     std::unique_ptr<WorldManager> worldManager;
     std::unordered_set<NextTickListEntry, TickEntryHash, TickEntryEqual> pendingTickListEntriesHashSet;
     std::set<NextTickListEntry> pendingTickListEntriesTreeSet;
+    // The tree set's entries by chunk (getPendingBlockUpdates asks for a chunk at a time).
+    std::unordered_map<int64_t, std::set<NextTickListEntry>> pendingTicksByChunk;
+    void indexPendingTick(const NextTickListEntry& entry, bool add);
     struct UuidHash {
         size_t operator()(const UUID& id) const { return static_cast<size_t>(id.hashCode()); }
     };
