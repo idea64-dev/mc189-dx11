@@ -148,4 +148,18 @@ std::string Locale::formatMessage(const std::string& translateKey, std::span<con
     return "Format error: " + s;
 }
 
+std::string StatCollector::translateToLocal(const std::string& key)
+{
+    if (I18n::i18nLocale == nullptr)
+        return key;
+    const auto& properties = I18n::i18nLocale->getProperties();
+    const auto it = properties.find(key);
+    return it == properties.end() ? key : it->second;
+}
+
+bool StatCollector::canTranslate(const std::string& key)
+{
+    return I18n::i18nLocale != nullptr && I18n::i18nLocale->getProperties().contains(key);
+}
+
 } // namespace mc

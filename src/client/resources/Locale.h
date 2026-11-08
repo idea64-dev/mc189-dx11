@@ -43,7 +43,16 @@ public:
     }
 
 private:
+    friend class StatCollector;
     static inline const Locale* i18nLocale = nullptr;
+};
+
+// Java: net/minecraft/util/StatCollector over StringTranslate. LanguageManager hands StringTranslate the current
+// locale's table on every reload, so on the client it reads the same map as I18n, but returns the raw value.
+class StatCollector {
+public:
+    static std::string translateToLocal(const std::string& key);
+    static bool canTranslate(const std::string& key);
 };
 
 class Language {
