@@ -4,6 +4,7 @@
 #include "client/main/GameConfiguration.h"
 #include "client/main/GameInstallation.h"
 #include "core/CrashHandler.h"
+#include "core/HeapProfiler.h"
 #include "core/Log.h"
 #include "core/Sha1.h"
 #include "core/StringUtil.h"
@@ -144,6 +145,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         mc::CrashHandler::logThreadStackAfter(std::max(1, std::atoi(trace)));
     if (const char* profile = std::getenv("MC_PROFILE"))
         mc::CrashHandler::startSampler(std::max(1, std::atoi(profile)));
+    mc::CrashHandler::startHangWatchdog(5);
+    if (const char* heap = std::getenv("MC_HEAPPROFILE"))
+        mc::HeapProfiler::start(std::max(1, std::atoi(heap)));
 
     if (!ignored.empty()) {
         std::string list;

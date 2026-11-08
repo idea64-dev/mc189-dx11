@@ -1,0 +1,11 @@
+# Loads the world left by an earlier run (-KeepSaves) and stands still for three minutes, for memory growth
+# (MC_HEAPPROFILE) and hangs.
+click 213 118      # main menu: Singleplayer
+wait 1000
+click 213 50       # first world
+click 135 198      # Play Selected World
+wait 180000
+key 1              # Esc: pause menu
+wait 1000
+click 213 174      # Save and Quit to Title
+wait 6000

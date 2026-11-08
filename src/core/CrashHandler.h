@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
+#include <string>
 
 namespace mc {
 
@@ -16,7 +18,13 @@ public:
     // Sampling profiler of the calling thread (MC_PROFILE=<seconds>): about every millisecond its stack is
     // captured; every `reportSeconds` the functions with the most samples, on top of the stack and anywhere in
     // it, are logged.
-    static void startSampler(int reportSeconds);
+    static void startSampler(int reportSeconds, const char* threadLabel = "client");
+    // Hang watchdog: when heartbeat() was not called for `seconds`, logs the stacks of every thread (once per
+    // hang). The client thread beats once per frame.
+    static void startHangWatchdog(int seconds);
+    static void heartbeat();
+    // The function containing a code address, with source line when the PDB has it (thread-safe).
+    static std::string describeAddress(uint64_t address);
 };
 
 } // namespace mc

@@ -59,6 +59,8 @@ void Log::shutdown()
 
 void Log::setThreadName(std::string name)
 {
+    // Also for debuggers and the hang watchdog (CrashHandler).
+    SetThreadDescription(GetCurrentThread(), toWide(name).c_str());
     threadName = std::move(name);
 }
 

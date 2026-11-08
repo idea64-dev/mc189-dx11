@@ -39,6 +39,7 @@
 #include "client/resources/SimpleReloadableResourceManager.h"
 #include "client/resources/model/ModelManager.h"
 #include "client/shader/Framebuffer.h"
+#include "core/CrashHandler.h"
 #include "core/Log.h"
 #include "core/StringUtil.h"
 #include "core/ZipArchive.h"
@@ -462,6 +463,7 @@ void Minecraft::runGameLoop()
 
     updateDisplay();
     std::this_thread::yield();
+    CrashHandler::heartbeat();
 
     ++fpsCounter;
     gamePaused = isSingleplayer() && currentScreen != nullptr && currentScreen->doesGuiPauseGame() && !theIntegratedServer->getPublic();
@@ -899,6 +901,8 @@ void Minecraft::dispatchKeypresses()
 
 void Minecraft::updateDisplay()
 {
+    // Loading screens present too: they count as frames for the hang watchdog.
+    CrashHandler::heartbeat();
     Display::update();
     checkWindowResize();
 }
@@ -1075,6 +1079,8 @@ void Minecraft::launchIntegratedServer(const std::string& folderName, const std:
         const std::optional<std::string> s = theIntegratedServer->getUserMessage();
         loadingScreen->displayLoadingString(s ? I18n::format(*s) : "");
         Display::processMessages();
+        // Waiting for the server is no hang.
+        CrashHandler::heartbeat();
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 

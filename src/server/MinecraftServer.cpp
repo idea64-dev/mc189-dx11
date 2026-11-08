@@ -1,6 +1,8 @@
 #include "server/MinecraftServer.h"
 
+#include "core/CrashHandler.h"
 #include "core/JavaTime.h"
+#include <cstdlib>
 #include "core/Log.h"
 #include "entity/EntityTracker.h"
 #include "network/NetworkManager.h"
@@ -277,6 +279,8 @@ void MinecraftServer::stopServer()
 void MinecraftServer::run()
 {
     serverThreadId = std::this_thread::get_id();
+    if (const char* profile = std::getenv("MC_PROFILE"))
+        CrashHandler::startSampler(std::max(1, std::atoi(profile)), "server");
 
     try {
         if (startServer()) {

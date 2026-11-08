@@ -121,7 +121,7 @@ function Save-Shot($hwnd, $name) {
     $before = @(Get-ChildItem $dir -Filter *.png -ErrorAction SilentlyContinue | ForEach-Object FullName)
     [U]::Key(0x3C)
     $file = $null
-    for ($i = 0; $i -lt 50 -and -not $file; $i++) {
+    for ($i = 0; $i -lt 200 -and -not $file; $i++) {
         Start-Sleep -Milliseconds 100
         $file = Get-ChildItem $dir -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.FullName } | Select-Object -First 1
     }
