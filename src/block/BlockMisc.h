@@ -63,6 +63,7 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(TYPE, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return static_cast<int>(state->getValue(TYPE)); }
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XYZ; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 1, 3); }
 
 protected:
     void construct() override
@@ -276,6 +277,12 @@ public:
     MC_BLOCK_CLASS(BlockWall)
 
     enum class EnumType { NORMAL, MOSSY };
+    struct EnumTypeInfo {
+        std::string_view name;
+        std::string_view unlocalizedName;
+    };
+    static constexpr EnumTypeInfo kTypes[2] { { "cobblestone", "normal" }, { "mossy_cobblestone", "mossy" } };
+    static const EnumTypeInfo& info(EnumType type) { return kTypes[static_cast<int>(type)]; }
     static const PropertyBool UP, NORTH, EAST, SOUTH, WEST;
     static const PropertyEnum<EnumType> VARIANT;
     static EnumType byMetadata(int meta) { return static_cast<EnumType>(meta < 0 || meta >= 2 ? 0 : meta); }
@@ -291,6 +298,7 @@ public:
     int damageDropped(const IBlockState* state) const override { return static_cast<int>(state->getValue(VARIANT)); }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return static_cast<int>(state->getValue(VARIANT)); }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 2); }
 
 protected:
     void construct() override
@@ -377,6 +385,7 @@ public:
     int damageDropped(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 4); }
 
 protected:
     void construct() override
@@ -462,7 +471,7 @@ protected:
 
 MC_ENUM_TRAITS(BlockTallGrass::EnumType, 3, BlockTallGrass::kTypeNames[static_cast<int>(value)])
 MC_ENUM_TRAITS(BlockTrapDoor::DoorHalf, 2, value == BlockTrapDoor::DoorHalf::TOP ? "top" : "bottom")
-MC_ENUM_TRAITS(BlockWall::EnumType, 2, value == BlockWall::EnumType::NORMAL ? "cobblestone" : "mossy_cobblestone")
+MC_ENUM_TRAITS(BlockWall::EnumType, 2, BlockWall::info(value).name)
 MC_ENUM_TRAITS(BlockStoneBrick::EnumType, 4, BlockStoneBrick::info(value).name)
 
 inline const PropertyBool BlockTNT::EXPLODE("explode");

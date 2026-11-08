@@ -27,6 +27,7 @@ public:
     const MapColor& getMapColor(const IBlockState* state) const override { return *info(state->getValue(VARIANT)).mapColor; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 2); }
 
 protected:
     void construct() override
@@ -64,6 +65,7 @@ public:
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::sandColor; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(TYPE, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(TYPE)).meta; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 3); }
 
 protected:
     void construct() override
@@ -96,6 +98,7 @@ public:
     int damageDropped(const IBlockState* state) const override { return info(state->getValue(TYPE)).meta; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(TYPE, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(TYPE)).meta; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 3); }
 
 protected:
     void construct() override

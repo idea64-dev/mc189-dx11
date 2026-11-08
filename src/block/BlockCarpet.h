@@ -25,6 +25,7 @@ public:
     int damageDropped(const IBlockState* state) const override { return getMetadata(state->getValue(COLOR)); }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(COLOR, dyeColorByMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return getMetadata(state->getValue(COLOR)); }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 16); }
 
 protected:
     void construct() override

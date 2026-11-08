@@ -16,6 +16,7 @@
 #include "util/Registry.h"
 #include "util/ResourceLocation.h"
 
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -27,6 +28,8 @@
 namespace mc {
 
 class CreativeTabs;
+class Item;
+class ItemStack;
 class Random;
 
 enum class EnumWorldBlockLayer { SOLID, CUTOUT_MIPPED, CUTOUT, TRANSLUCENT };
@@ -175,6 +178,8 @@ public:
     const BlockState& getBlockState() const { return *blockState; }
     const IBlockState* getDefaultState() const { return defaultBlockState; }
     virtual EnumOffsetType getOffsetType() const { return EnumOffsetType::NONE; }
+    // The block's creative inventory stacks; one of the item with metadata 0 unless overridden.
+    virtual void getSubBlocks(Item* item, const CreativeTabs* tab, std::vector<ItemStack>& list) const;
     std::string toString() const;
     // Java: getClass().getSimpleName(), for the registry dump.
     virtual std::string_view getClassName() const { return "Block"; }
@@ -196,6 +201,9 @@ protected:
     }
     void setDefaultState(const IBlockState* state) { defaultBlockState = state; }
     void setBlockBounds(float minXIn, float minYIn, float minZIn, float maxXIn, float maxYIn, float maxZIn);
+    // getSubBlocks helpers: a stack of the item for each metadata, or for each in [from, to).
+    static void addSubBlocks(Item* item, std::vector<ItemStack>& list, std::initializer_list<int> metas);
+    static void addSubBlocks(Item* item, std::vector<ItemStack>& list, int from, int to);
 
     bool fullBlock = false;
     int lightOpacity = 0;

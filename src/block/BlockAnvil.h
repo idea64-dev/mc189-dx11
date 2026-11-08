@@ -33,6 +33,7 @@ public:
         i = i | state->getValue(DAMAGE) << 2;
         return i;
     }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1, 2 }); }
 
 protected:
     void construct() override

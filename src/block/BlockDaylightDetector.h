@@ -24,6 +24,11 @@ public:
     bool canProvidePower() const override { return true; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(POWER, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(POWER); }
+    void getSubBlocks(Item* item, const CreativeTabs* tab, std::vector<ItemStack>& list) const override
+    {
+        if (!inverted)
+            Block::getSubBlocks(item, tab, list);
+    }
 
 protected:
     void construct() override
@@ -39,7 +44,7 @@ protected:
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &POWER }); }
 
 private:
-    [[maybe_unused]] const bool inverted;
+    const bool inverted;
 };
 
 inline const PropertyInteger BlockDaylightDetector::POWER("power", 0, 15);

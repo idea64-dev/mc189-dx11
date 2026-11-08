@@ -5,6 +5,8 @@
 
 #include "block/BlockPlanks.h"
 #include "block/BlockSand.h"
+#include "init/Blocks.h"
+#include "item/Item.h"
 
 namespace mc {
 
@@ -107,6 +109,11 @@ public:
     }
     int damageDropped(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
     const MapColor& getMapColor(const IBlockState* state) const override { return *info(state->getValue(VARIANT)).mapColor; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override
+    {
+        if (item != Item::getItemFromBlock(Blocks::double_stone_slab))
+            addSubBlocks(item, list, { 0, 1, 3, 4, 5, 6, 7 }); // all but WOOD
+    }
 
 protected:
     void construct() override
@@ -175,6 +182,11 @@ public:
     }
     const MapColor& getMapColor(const IBlockState*) const override { return *BlockSand::info(BlockSand::EnumType::RED_SAND).mapColor; }
     int damageDropped(const IBlockState*) const override { return 0; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override
+    {
+        if (item != Item::getItemFromBlock(Blocks::double_stone_slab2))
+            addSubBlocks(item, list, { 0 });
+    }
 
 protected:
     void construct() override
@@ -237,6 +249,11 @@ public:
         return i;
     }
     int damageDropped(const IBlockState* state) const override { return BlockPlanks::getMetadata(state->getValue(VARIANT)); }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override
+    {
+        if (item != Item::getItemFromBlock(Blocks::double_wooden_slab))
+            addSubBlocks(item, list, 0, 6);
+    }
 
 protected:
     void construct() override

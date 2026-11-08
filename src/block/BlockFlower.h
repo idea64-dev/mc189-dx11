@@ -46,6 +46,11 @@ public:
     }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(getTypeProperty())).meta; }
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XZ; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override
+    {
+        for (const EnumFlowerType flowerType : getTypes(getBlockType()))
+            addSubBlocks(item, list, { info(flowerType).meta });
+    }
 
 protected:
     void construct() override

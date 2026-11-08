@@ -41,6 +41,7 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     const MapColor& getMapColor(const IBlockState* state) const override { return getMapColor(state->getValue(VARIANT)); }
     int getMetaFromState(const IBlockState* state) const override { return getMetadata(state->getValue(VARIANT)); }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 6); }
 
 protected:
     void construct() override

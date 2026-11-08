@@ -3,6 +3,7 @@
 // Original: net/minecraft/block/BlockGrass.java, BlockMycelium.java and BlockDirt.java
 
 #include "block/BlockBasics.h"
+#include "item/Item.h"
 #include "world/Colorizer.h"
 
 namespace mc {
@@ -95,6 +96,7 @@ public:
             type = DirtType::DIRT;
         return info(type).metadata;
     }
+    void getSubBlocks(Item*, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(Item::getItemFromBlock(this), list, { 0, 1, 2 }); }
 
 protected:
     void construct() override

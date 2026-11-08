@@ -90,6 +90,7 @@ public:
     int damageDropped(const IBlockState* state) const override { return state->getValue(WET) ? 1 : 0; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(WET, (meta & 1) == 1); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(WET) ? 1 : 0; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1 }); }
 
 protected:
     void construct() override

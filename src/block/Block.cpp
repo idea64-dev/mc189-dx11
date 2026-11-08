@@ -4,6 +4,7 @@
 #include "core/Java.h"
 #include "core/JavaString.h"
 #include "creativetab/CreativeTabs.h"
+#include "item/ItemStack.h"
 #include "util/Random.h"
 
 namespace mc {
@@ -300,6 +301,23 @@ bool Block::isEqualTo(const Block* blockIn, const Block* other)
 std::string Block::toString() const
 {
     return "Block{" + getNameForBlock(this) + "}";
+}
+
+void Block::getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const
+{
+    list.emplace_back(item, 1, 0);
+}
+
+void Block::addSubBlocks(Item* item, std::vector<ItemStack>& list, std::initializer_list<int> metas)
+{
+    for (const int meta : metas)
+        list.emplace_back(item, 1, meta);
+}
+
+void Block::addSubBlocks(Item* item, std::vector<ItemStack>& list, int from, int to)
+{
+    for (int meta = from; meta < to; ++meta)
+        list.emplace_back(item, 1, meta);
 }
 
 } // namespace mc

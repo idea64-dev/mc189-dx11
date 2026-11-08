@@ -96,6 +96,7 @@ public:
     }
     BlockPlanks::EnumType getWoodType(int meta) const override { return BlockPlanks::byMetadata((meta & 3) % 4); }
     int damageDropped(const IBlockState* state) const override { return BlockPlanks::getMetadata(state->getValue(VARIANT)); }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1, 2, 3 }); }
 
 protected:
     void construct() override
@@ -128,6 +129,7 @@ public:
         return i;
     }
     BlockPlanks::EnumType getWoodType(int meta) const override { return BlockPlanks::byMetadata((meta & 3) + 4); }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1 }); }
 
 protected:
     void construct() override

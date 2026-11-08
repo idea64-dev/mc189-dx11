@@ -52,6 +52,7 @@ public:
         return state->getValue(HALF) == EnumBlockHalf::UPPER ? 8 | getHorizontalIndex(state->getValue(FACING)) : info(state->getValue(VARIANT)).meta;
     }
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XZ; }
+    void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 6); }
 
 protected:
     void construct() override

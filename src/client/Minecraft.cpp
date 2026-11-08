@@ -24,6 +24,7 @@
 #include "core/Log.h"
 #include "core/StringUtil.h"
 #include "core/ZipArchive.h"
+#include "init/Bootstrap.h"
 #include "platform/Display.h"
 #include "platform/Keyboard.h"
 #include "platform/Mouse.h"
@@ -112,6 +113,7 @@ Minecraft::Minecraft(const GameConfiguration& gameConfig)
     mcDefaultResourcePack = std::make_shared<DefaultResourcePack>(
         std::make_shared<const ZipArchive>(gameConfig.folderInfo.clientJar),
         ResourceIndex(gameConfig.folderInfo.assetsDir, gameConfig.folderInfo.assetIndex).getResourceMap());
+    Bootstrap::registerAll();
 }
 
 Minecraft::~Minecraft()
