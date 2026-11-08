@@ -1,0 +1,30 @@
+# Options screens from the main menu at 854x480 (GUI scale 2, 427x240 GUI pixels), default options.
+click 160 200      # main menu: Options...
+shot options
+click 130 140      # Video Settings...
+shot video
+wheel -5
+shot video_scrolled
+click 210 222      # Done
+click 290 140      # Controls...
+shot controls
+wheel -10
+shot controls_scrolled
+click 130 220      # Done
+click 130 116      # Music & Sounds...
+shot sounds
+click 210 217      # Done
+click 130 164      # Language...
+shot language
+click 290 211      # Done
+click 290 164      # Chat Settings...
+shot chat
+click 210 169      # Done
+click 130 92       # Skin Customization...
+shot skin
+click 210 145      # Done
+click 290 188      # Snooper Settings...
+shot snooper
+click 290 219      # Done
+click 290 116      # Broadcast Settings...
+shot stream

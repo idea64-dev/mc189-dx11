@@ -1,10 +1,17 @@
-"""Compares a port screenshot with a vanilla one inside the regions that do not depend on animation.
+"""Compares port screenshots with vanilla ones.
 
     python tools/compare_screens.py run/vanilla_menu.png run/smoke_1_start.png
+        Main menu at 854x480 (GUI scale 2): only the regions that don't depend on the animated panorama -- the
+        opaque buttons with their labels, and the pixels of the bottom text and its shadow.
 
-Regions are for the main menu at 854x480 (GUI scale 2): the opaque buttons with their labels, and the
-pixels of the bottom text and its shadow. Exits with 1 if any of them differ.
+    python tools/compare_screens.py --full run/cmp/vanilla run/cmp/port [names...]
+        Whole frames, for static screens (tools/ui_scenario.ps1 output): every NAME.png present in both
+        directories, or only the given names. Writes NAME_diff.png next to the port frame, differing pixels in
+        red over a dimmed copy.
+
+Exits with 1 if anything differs.
 """
+import os
 import sys
 from PIL import Image
 
@@ -18,9 +25,9 @@ MAIN_MENU_RECTS = {
 }
 
 
-def main():
-    vanilla = Image.open(sys.argv[1]).convert("RGB")
-    port = Image.open(sys.argv[2]).convert("RGB")
+def compare_main_menu(vanilla_path, port_path):
+    vanilla = Image.open(vanilla_path).convert("RGB")
+    port = Image.open(port_path).convert("RGB")
     if vanilla.size != port.size:
         print(f"size differs: {vanilla.size} vs {port.size}")
         return 1
@@ -42,6 +49,44 @@ def main():
     print(f"bottom text   {bad:6d} differing of {text}")
     failed |= bad > 0
     return 1 if failed else 0
+
+
+def compare_full(vanilla_dir, port_dir, names):
+    if not names:
+        names = sorted(
+            os.path.splitext(f)[0]
+            for f in os.listdir(vanilla_dir)
+            if f.endswith(".png") and not f.endswith("_diff.png") and os.path.exists(os.path.join(port_dir, f))
+        )
+    failed = False
+    for name in names:
+        vanilla = Image.open(os.path.join(vanilla_dir, name + ".png")).convert("RGB")
+        port = Image.open(os.path.join(port_dir, name + ".png")).convert("RGB")
+        if vanilla.size != port.size:
+            print(f"{name:20s} size differs: {vanilla.size} vs {port.size}")
+            failed = True
+            continue
+        vp, pp = vanilla.load(), port.load()
+        diff = Image.eval(port, lambda c: c // 3)
+        dp = diff.load()
+        bad = 0
+        width, height = vanilla.size
+        for y in range(height):
+            for x in range(width):
+                if vp[x, y] != pp[x, y]:
+                    bad += 1
+                    dp[x, y] = (255, 0, 0)
+        print(f"{name:20s} {bad:7d} differing of {width * height}")
+        if bad:
+            diff.save(os.path.join(port_dir, name + "_diff.png"))
+            failed = True
+    return 1 if failed else 0
+
+
+def main():
+    if len(sys.argv) >= 4 and sys.argv[1] == "--full":
+        return compare_full(sys.argv[2], sys.argv[3], sys.argv[4:])
+    return compare_main_menu(sys.argv[1], sys.argv[2])
 
 
 if __name__ == "__main__":

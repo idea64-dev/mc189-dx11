@@ -1,0 +1,16 @@
+# Resource pack screen with the packs from tools/scenarios/make_test_packs.py (run it first).
+click 160 200      # main menu: Options...
+click 130 188      # Resource Packs...
+shot rp
+move 20 60         # hover the first available pack (FuturePack)
+shot rp_hover
+click 20 60        # select it: incompatible, asks first
+shot rp_confirm
+click 130 146      # Yes
+shot rp_future
+click 20 60        # select TestPack.zip, now first
+shot rp_selected
+click 290 200      # Done: reloads resources
+shot options_pack
+click 130 188      # Resource Packs... again
+shot rp_again
