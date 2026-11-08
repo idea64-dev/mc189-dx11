@@ -3,10 +3,11 @@
 // Original: net/minecraft/client/gui/GuiScreen.java
 // Screens are shared_ptr-owned: a child screen keeps its parent alive (Java's GC did), and code that calls into
 // a screen holds a reference so the screen survives replacing itself through displayGuiScreen.
-// Not ported yet: item tooltips, chat component hover/click (with the inventory and chat), GuiLabel.
+// Not ported yet: item tooltips, chat component hover/click (with the inventory and chat).
 
 #include "client/gui/Gui.h"
 #include "client/gui/GuiButton.h"
+#include "client/gui/GuiLabel.h"
 
 #include <cstdint>
 #include <memory>
@@ -76,6 +77,7 @@ protected:
 
     Minecraft* mc = nullptr;
     std::vector<std::unique_ptr<GuiButton>> buttonList;
+    std::vector<std::unique_ptr<GuiLabel>> labelList;
     FontRenderer* fontRendererObj = nullptr;
 
 private:

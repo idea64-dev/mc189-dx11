@@ -42,6 +42,11 @@ public:
     static std::string getFormatFromString(std::string_view text);
     int getColorCode(char16_t character) const;
 
+    // UTF-16 forms, for callers that index text like Java does (GuiTextField).
+    int getStringWidth16(std::u16string_view text) const;
+    std::u16string trimStringToWidth16(std::u16string_view text, int width, bool reverse = false) const;
+    int drawStringWithShadow16(std::u16string_view text, float x, float y, int color);
+
     int FONT_HEIGHT = 9;
     Random fontRandom;
 
@@ -59,8 +64,6 @@ private:
     int renderString(std::u16string_view text, float x, float y, int color, bool dropShadow);
     void renderSplitString(std::u16string_view str, int x, int y, int wrapWidth, bool addShadow);
 
-    int getStringWidth16(std::u16string_view text) const;
-    std::u16string trimStringToWidth16(std::u16string_view text, int width, bool reverse) const;
     std::u16string wrapFormattedStringToWidth16(std::u16string_view str, int wrapWidth) const;
     std::vector<std::u16string> listFormattedStringToWidth16(std::u16string_view str, int wrapWidth) const;
     int sizeStringToWidth(std::u16string_view str, int wrapWidth) const;

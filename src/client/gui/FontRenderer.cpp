@@ -234,6 +234,14 @@ int FontRenderer::drawString(std::string_view text, int x, int y, int color)
     return drawString(text, static_cast<float>(x), static_cast<float>(y), color, false);
 }
 
+int FontRenderer::drawStringWithShadow16(std::u16string_view utf16, float x, float y, int color)
+{
+    DxStateManager::enableAlpha();
+    resetStyles();
+    const int i = renderString(utf16, x + 1.0f, y + 1.0f, color, true);
+    return std::max(i, renderString(utf16, x, y, color, false));
+}
+
 int FontRenderer::drawString(std::string_view text, float x, float y, int color, bool dropShadow)
 {
     DxStateManager::enableAlpha();

@@ -20,6 +20,8 @@ void GuiScreen::drawScreen(int mouseX, int mouseY, float /*partialTicks*/)
     // Index loop like Java: a button's draw may not change the list, but keep the original's shape.
     for (size_t i = 0; i < buttonList.size(); ++i)
         buttonList[i]->drawButton(*mc, mouseX, mouseY);
+    for (size_t j = 0; j < labelList.size(); ++j)
+        labelList[j]->drawLabel(*mc, mouseX, mouseY);
 }
 
 void GuiScreen::keyTyped(char16_t /*typedChar*/, int keyCode)

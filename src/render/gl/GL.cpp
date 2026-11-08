@@ -426,6 +426,31 @@ ID3D11BlendState* blendState()
     return cached.Get();
 }
 
+// GL_OR_REVERSE (src | ~dst), the only logic op the game uses: GuiTextField's selection highlight, drawn untextured
+// in a single color whose channels are all 0 or 1. Per channel that is 1 where the source is 1 and 1 - dst where
+// it is 0, which blending gives exactly: a source of 1, minus dst times a blend factor of 1 - color.
+ID3D11BlendState* logicOrReverseBlendState()
+{
+    State& s = state();
+    const uint8_t mask = static_cast<uint8_t>((s.colorMask[0] ? 1 : 0) | (s.colorMask[1] ? 2 : 0) | (s.colorMask[2] ? 4 : 0) | (s.colorMask[3] ? 8 : 0));
+    const uint64_t key = (1ull << 63) | mask;
+    auto& cached = s.blendStates[key];
+    if (!cached) {
+        D3D11_BLEND_DESC desc {};
+        D3D11_RENDER_TARGET_BLEND_DESC& rt = desc.RenderTarget[0];
+        rt.BlendEnable = TRUE;
+        rt.SrcBlend = D3D11_BLEND_ONE;
+        rt.DestBlend = D3D11_BLEND_BLEND_FACTOR;
+        rt.BlendOp = D3D11_BLEND_OP_SUBTRACT;
+        rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+        rt.DestBlendAlpha = D3D11_BLEND_BLEND_FACTOR;
+        rt.BlendOpAlpha = D3D11_BLEND_OP_SUBTRACT;
+        rt.RenderTargetWriteMask = mask;
+        throwIfFailed(s.d3d->CreateBlendState(&desc, cached.GetAddressOf()), "CreateBlendState(logic op)");
+    }
+    return cached.Get();
+}
+
 ID3D11DepthStencilState* depthState()
 {
     State& s = state();
@@ -1190,6 +1215,20 @@ void drawVertices(int mode, std::span<const GLVertex> vertices)
     if (vertices.empty())
         return;
 
+    // See logicOrReverseBlendState: the fragments become 1 and the color moves into the blend factor.
+    const bool logicOrReverse = s.colorLogicOp && s.logicOp == 0x150B; // GL_OR_REVERSE
+    std::vector<GLVertex> logicVertices;
+    float logicBlendFactor[4] {};
+    if (logicOrReverse) {
+        const float color[4] { vertices[0].r, vertices[0].g, vertices[0].b, vertices[0].a };
+        for (int i = 0; i < 4; ++i)
+            logicBlendFactor[i] = color[i] >= 1.0f ? 0.0f : 1.0f;
+        logicVertices.assign(vertices.begin(), vertices.end());
+        for (GLVertex& v : logicVertices)
+            v.r = v.g = v.b = v.a = 1.0f;
+        vertices = logicVertices;
+    }
+
     const bool polygons = mode >= GL_TRIANGLES;
     if (polygons && s.cullFace && s.cullMode == GL_FRONT_AND_BACK)
         return;
@@ -1234,7 +1273,10 @@ void drawVertices(int mode, std::span<const GLVertex> vertices)
 
     ctx->RSSetState(rasterizerState(polygons));
     ctx->OMSetDepthStencilState(depthState(), 0);
-    ctx->OMSetBlendState(blendState(), nullptr, 0xFFFFFFFF);
+    if (logicOrReverse)
+        ctx->OMSetBlendState(logicOrReverseBlendState(), logicBlendFactor, 0xFFFFFFFF);
+    else
+        ctx->OMSetBlendState(blendState(), nullptr, 0xFFFFFFFF);
 
     ctx->IASetInputLayout(s.inputLayout.Get());
     ctx->IASetPrimitiveTopology(topology);
