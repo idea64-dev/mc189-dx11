@@ -83,9 +83,14 @@ std::string hex(float value)
     return buffer;
 }
 
+std::filesystem::path referencePath()
+{
+    return std::filesystem::path(__FILE__).parent_path() / "reference" / "models.txt";
+}
+
 std::vector<std::string> referenceLines()
 {
-    std::ifstream file(std::filesystem::path(__FILE__).parent_path() / "reference" / "models.txt");
+    std::ifstream file(referencePath());
     REQUIRE(file);
     std::vector<std::string> lines;
     std::string line;
@@ -104,6 +109,10 @@ TEST_CASE("Block and item models bake like the original")
     const std::optional<GameInstallation> game = findGameInstallation(".", {}, {}, "1.8.9", "1.8");
     if (!game) {
         MESSAGE("Minecraft 1.8.9 not installed, skipping");
+        return;
+    }
+    if (!std::filesystem::exists(referencePath())) {
+        MESSAGE("tests/reference/models.txt not generated yet (tools/reference/generate_game.ps1), skipping");
         return;
     }
     Bootstrap::registerAll();
