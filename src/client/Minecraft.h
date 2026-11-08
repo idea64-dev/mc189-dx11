@@ -31,10 +31,13 @@ class IResourceManager;
 class IResourcePack;
 class ISaveFormat;
 class LanguageManager;
+class ModelManager;
+class RenderItem;
 class ResourcePackRepository;
 class SimpleReloadableResourceManager;
 class SoundHandler;
 class TextureManager;
+class TextureMap;
 class WorldClient;
 class WorldSettings;
 
@@ -68,6 +71,9 @@ public:
 
     const DefaultResourcePack& getDefaultResourcePack() const { return *mcDefaultResourcePack; }
     TextureManager& getTextureManager() { return *renderEngine; }
+    TextureMap& getTextureMapBlocks() { return *textureMapBlocks; }
+    ModelManager& getModelManager() { return *modelManager; }
+    RenderItem& getRenderItem() { return *renderItem; }
     Framebuffer& getFramebuffer() { return *framebufferMc; }
     LanguageManager& getLanguageManager() { return *mcLanguageManager; }
     SoundHandler& getSoundHandler() { return *mcSoundHandler; }
@@ -142,6 +148,9 @@ private:
     std::unique_ptr<SimpleReloadableResourceManager> mcResourceManager;
     std::unique_ptr<LanguageManager> mcLanguageManager;
     std::unique_ptr<TextureManager> renderEngine;
+    std::shared_ptr<TextureMap> textureMapBlocks;
+    std::unique_ptr<ModelManager> modelManager;
+    std::unique_ptr<RenderItem> renderItem;
     std::unique_ptr<SoundHandler> mcSoundHandler;
     std::unique_ptr<MusicTicker> mcMusicTicker;
     std::unique_ptr<EntityRenderer> entityRenderer;

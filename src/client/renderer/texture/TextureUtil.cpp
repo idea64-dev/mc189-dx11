@@ -65,9 +65,10 @@ std::vector<std::vector<uint32_t>> TextureUtil::generateMipmapData(int levels, i
     result[0] = data[0];
 
     if (levels > 0) {
+        // Java's loop runs to the number of levels, not of pixels: only the first levels + 1 pixels are looked at.
         bool hasTransparency = false;
-        for (const uint32_t pixel : data[0]) {
-            if ((static_cast<int32_t>(pixel) >> 24) == 0) {
+        for (size_t i = 0; i < data.size(); ++i) {
+            if ((static_cast<int32_t>(data[0].at(i)) >> 24) == 0) {
                 hasTransparency = true;
                 break;
             }

@@ -11,8 +11,10 @@
 #include "client/renderer/EntityRenderer.h"
 #include "client/renderer/OpenGlHelper.h"
 #include "client/renderer/Tessellator.h"
+#include "client/renderer/entity/RenderItem.h"
 #include "client/renderer/texture/SimpleTexture.h"
 #include "client/renderer/texture/TextureManager.h"
+#include "client/renderer/texture/TextureMap.h"
 #include "client/renderer/texture/TextureUtil.h"
 #include "client/renderer/vertex/DefaultVertexFormats.h"
 #include "client/resources/DefaultResourcePack.h"
@@ -21,6 +23,7 @@
 #include "client/resources/ResourceIndex.h"
 #include "client/resources/ResourcePackRepository.h"
 #include "client/resources/SimpleReloadableResourceManager.h"
+#include "client/resources/model/ModelManager.h"
 #include "client/shader/Framebuffer.h"
 #include "core/Log.h"
 #include "core/StringUtil.h"
@@ -214,7 +217,17 @@ void Minecraft::startGame()
     DxStateManager::loadIdentity();
     DxStateManager::matrixMode(5888);
 
-    // Java: texture map, model manager, render item/manager, block renderer (stage 7)
+    textureMapBlocks = std::make_shared<TextureMap>("textures");
+    textureMapBlocks->setMipmapLevels(gameSettings->mipmapLevels);
+    renderEngine->loadTickableTexture(TextureMap::locationBlocksTexture, textureMapBlocks, textureMapBlocks.get());
+    renderEngine->bindTexture(TextureMap::locationBlocksTexture);
+    textureMapBlocks->setBlurMipmapDirect(false, gameSettings->mipmapLevels > 0);
+    modelManager = std::make_unique<ModelManager>(*textureMapBlocks);
+    mcResourceManager->registerReloadListener(*modelManager);
+    renderItem = std::make_unique<RenderItem>(*renderEngine, *modelManager);
+    // Java: renderManager, itemRenderer (stage 7/10)
+    mcResourceManager->registerReloadListener(*renderItem);
+    // Java: blockRenderDispatcher (stage 7)
     entityRenderer = std::make_unique<EntityRenderer>(*this);
     // Java: renderGlobal, guiAchievement (stage 7/12)
     DxStateManager::viewport(0, 0, displayWidth, displayHeight);
@@ -655,6 +668,9 @@ void Minecraft::shutdownMinecraftApplet()
     entityRenderer.reset();
     fontRendererObj.reset();
     standardGalacticFontRenderer.reset();
+    renderItem.reset();
+    modelManager.reset();
+    textureMapBlocks.reset();
     renderEngine.reset();
     framebufferMc.reset();
     mcMusicTicker.reset();

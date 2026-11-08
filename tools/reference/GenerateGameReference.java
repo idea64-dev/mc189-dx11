@@ -27,6 +27,7 @@ import net.minecraft.util.Vec3;
  *   tests/reference/blocks.txt         the block registry (net/minecraft/block/BlockDump.java)
  *   tests/reference/items.txt          the item registry (net/minecraft/item/ItemDump.java)
  *   tests/reference/world.txt          chunk storage and the light engine (net/minecraft/world/WorldDump.java)
+ *   tests/reference/models.txt         block/item models and the block atlas (net/minecraft/client/renderer/texture/ModelDump.java)
  *
  * Run by generate_game.ps1. Everything is hex-encoded UTF-8 so any text survives the trip into C++.
  */
@@ -249,6 +250,9 @@ public class GenerateGameReference {
         }
         try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Paths.get(args[0], "world.txt"), StandardCharsets.UTF_8))) {
             net.minecraft.world.WorldDump.dump(out);
+        }
+        try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Paths.get(args[0], "models.txt"), StandardCharsets.UTF_8))) {
+            net.minecraft.client.renderer.texture.ModelDump.dump(out);
         }
     }
 }

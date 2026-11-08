@@ -1,7 +1,6 @@
 #pragma once
 
 // Original: net/minecraft/client/renderer/texture/TextureManager.java
-// Tickable textures (animated atlas, clock, compass) are registered here once they exist (stage 7).
 
 #include "client/resources/IResourceManager.h"
 #include "client/renderer/texture/ITextureObject.h"
@@ -10,10 +9,12 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace mc {
 
 class DynamicTexture;
+class ITickable;
 
 class TextureManager : public IResourceManagerReloadListener {
 public:
@@ -24,14 +25,17 @@ public:
     std::shared_ptr<ITextureObject> getTexture(const ResourceLocation& textureLocation) const;
     ResourceLocation getDynamicTextureLocation(const std::string& name, std::shared_ptr<DynamicTexture> texture);
     void deleteTexture(const ResourceLocation& textureLocation);
-    // Java: ticks animated textures (clock, compass, atlas animations) registered with loadTickableTexture.
-    void tick() { }
+    // Java: loadTickableTexture(location, ITickableTextureObject) -- the texture is ticked every game tick.
+    bool loadTickableTexture(const ResourceLocation& textureLocation, std::shared_ptr<ITextureObject> textureObj, ITickable* tickable);
+    // Ticks the textures registered with loadTickableTexture (the block atlas animations).
+    void tick();
 
     void onResourceManagerReload(const IResourceManager& resourceManager) override;
 
 private:
     std::unordered_map<ResourceLocation, std::shared_ptr<ITextureObject>> mapTextureObjects;
     std::unordered_map<std::string, int> mapTextureCounters;
+    std::vector<ITickable*> listTickables;
     const IResourceManager* theResourceManager;
 };
 

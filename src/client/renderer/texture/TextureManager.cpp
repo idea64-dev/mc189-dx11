@@ -1,6 +1,7 @@
 #include "client/renderer/texture/TextureManager.h"
 
 #include "client/renderer/texture/SimpleTexture.h"
+#include "client/renderer/texture/TextureMap.h"
 #include "client/renderer/texture/TextureUtil.h"
 #include "core/Log.h"
 
@@ -47,6 +48,20 @@ bool TextureManager::loadTexture(const ResourceLocation& textureLocation, std::s
     }
     mapTextureObjects[textureLocation] = std::move(textureObj);
     return loaded;
+}
+
+bool TextureManager::loadTickableTexture(const ResourceLocation& textureLocation, std::shared_ptr<ITextureObject> textureObj, ITickable* tickable)
+{
+    if (!loadTexture(textureLocation, std::move(textureObj)))
+        return false;
+    listTickables.push_back(tickable);
+    return true;
+}
+
+void TextureManager::tick()
+{
+    for (ITickable* tickable : listTickables)
+        tickable->tick();
 }
 
 std::shared_ptr<ITextureObject> TextureManager::getTexture(const ResourceLocation& textureLocation) const
