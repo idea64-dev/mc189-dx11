@@ -50,6 +50,14 @@ std::optional<std::string> formatArgs(std::string_view pattern, const Args&... a
 // String.length() and charAt() counting UTF-16 code units.
 size_t utf16Length(std::string_view utf8);
 
+// String.compareTo: lexicographic over UTF-16 code units (differs from UTF-8 byte order only around surrogates).
+int compareTo(std::string_view a, std::string_view b);
+
+// Comparator for maps ordered like Java's TreeMap<String, ...>.
+struct StringLess {
+    bool operator()(std::string_view a, std::string_view b) const { return compareTo(a, b) < 0; }
+};
+
 // String.trim(): strips characters <= ' ' from both ends (UTF-8 bytes of non-ASCII characters are all above).
 std::string trim(std::string_view text);
 

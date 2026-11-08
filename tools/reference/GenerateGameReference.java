@@ -213,6 +213,23 @@ public class GenerateGameReference {
                 + d(box.calculateXOffset(other, move)) + ", " + d(box.calculateYOffset(other, move)) + ", " + d(box.calculateZOffset(other, move)) + " } },");
         }
         out.println("};");
+
+        // StrictMath.sin/cos over small, medium, huge and special arguments, and Math.sin/cos on the range the
+        // game feeds them (angles up to a few turns).
+        out.println("struct TrigCase { unsigned long long x, sin, cos, mathSin, mathCos; };");
+        out.println("inline constexpr TrigCase trigCases[] = {");
+        java.util.List<Double> xs = new java.util.ArrayList<Double>();
+        double[] trigFixed = {0.0, -0.0, 1e-9, 0.25, Math.PI / 4, Math.PI / 2, Math.PI, 3 * Math.PI / 4, 2 * Math.PI, 100.0, 1e6, 1e9, 1e15, 1e300, -1e300,
+            Double.MIN_VALUE, Double.MAX_VALUE, Double.POSITIVE_INFINITY, Double.NaN, 0.785398163397448, 2.356194490192345, 1.5707963267948966};
+        for (double x : trigFixed) xs.add(x);
+        Random tr = new Random(77);
+        for (int i = 0; i < 300; i++) xs.add((tr.nextDouble() - 0.5) * 4 * Math.PI);
+        for (int i = 0; i < 100; i++) xs.add((tr.nextDouble() - 0.5) * Math.pow(10, tr.nextInt(40)));
+        for (int i = 0; i < 100; i++) xs.add((double) ((float) i / 100.0F * (float) Math.PI * 2.0F));
+        for (double x : xs) {
+            out.println("    { " + d(x) + ", " + d(StrictMath.sin(x)) + ", " + d(StrictMath.cos(x)) + ", " + d(Math.sin(x)) + ", " + d(Math.cos(x)) + " },");
+        }
+        out.println("};");
     }
 
     public static void main(String[] args) throws Exception {

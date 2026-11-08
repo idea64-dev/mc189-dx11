@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MinecraftDX11 VERSION 0.1.0 LANGUAGES C CXX)
+project(MinecraftDX11 VERSION 0.1.0 LANGUAGES C CXX ASM_MASM)
 
 if(NOT WIN32)
     message(FATAL_ERROR "MinecraftDX11 targets Windows only (Direct3D 11).")
@@ -29,6 +29,7 @@ target_include_directories(third_party_headers SYSTEM INTERFACE third_party)
 file(GLOB_RECURSE MC_ENGINE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/*.h"
+    "${CMAKE_SOURCE_DIR}/src/*.asm"
 )
 list(REMOVE_ITEM MC_ENGINE_SOURCES "${CMAKE_SOURCE_DIR}/src/client/main/Main.cpp")
 
@@ -68,7 +69,7 @@ target_compile_definitions(mc_engine PUBLIC
 )
 # /fp:precise: IEEE results without fused multiply-add (MSVC only contracts with an explicit /fp:contract),
 # so float math matches the JVM bit for bit.
-target_compile_options(mc_engine PUBLIC /W4 /permissive- /utf-8 /fp:precise)
+target_compile_options(mc_engine PUBLIC "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/utf-8;/fp:precise>")
 target_link_libraries(mc_engine
     PUBLIC d3d11 dxgi dxguid
     PRIVATE miniz stb_vorbis third_party_headers dbghelp bcrypt xaudio2 rpcrt4 icu

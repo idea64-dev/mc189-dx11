@@ -2,6 +2,7 @@
 
 #include "core/StringUtil.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -169,6 +170,18 @@ float parseFloat(std::string_view text)
     if (result.ec == std::errc::result_out_of_range)
         value = std::abs(value) < 1.0f ? 0.0f : INFINITY;
     return negative ? -value : value;
+}
+
+int compareTo(std::string_view a, std::string_view b)
+{
+    const std::u16string ua = toUtf16(a);
+    const std::u16string ub = toUtf16(b);
+    const size_t n = std::min(ua.size(), ub.size());
+    for (size_t i = 0; i < n; ++i) {
+        if (ua[i] != ub[i])
+            return static_cast<int>(ua[i]) - static_cast<int>(ub[i]);
+    }
+    return static_cast<int>(ua.size()) - static_cast<int>(ub.size());
 }
 
 std::string trim(std::string_view text)

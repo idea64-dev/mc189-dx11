@@ -1,6 +1,8 @@
 // BlockPos, EnumFacing, Vec3 and AxisAlignedBB against the original (tests/reference/MathReference.inc from
 // tools/reference/generate_game.ps1), bit for bit.
 
+#include "core/JavaMath.h"
+#include "core/StrictMath.h"
 #include "util/Vec3.h"
 
 #include "reference/MathReference.inc"
@@ -108,5 +110,17 @@ TEST_CASE("AxisAlignedBB intercepts and collision offsets")
         CHECK(raw(box.calculateXOffset(other, move)) == c.offsets[0]);
         CHECK(raw(box.calculateYOffset(other, move)) == c.offsets[1]);
         CHECK(raw(box.calculateZOffset(other, move)) == c.offsets[2]);
+    }
+}
+
+TEST_CASE("StrictMath sin and cos match fdlibm and Math")
+{
+    for (const auto& c : trigCases) {
+        const double x = std::bit_cast<double>(c.x);
+        CAPTURE(x);
+        CHECK(std::bit_cast<unsigned long long>(StrictMath::sin(x)) == c.sin);
+        CHECK(std::bit_cast<unsigned long long>(StrictMath::cos(x)) == c.cos);
+        CHECK(std::bit_cast<unsigned long long>(java::mathSin(x)) == c.mathSin);
+        CHECK(std::bit_cast<unsigned long long>(java::mathCos(x)) == c.mathCos);
     }
 }
