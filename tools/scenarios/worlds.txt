@@ -1,0 +1,52 @@
+# The singleplayer screens at 854x480 (GUI scale 2, 427x240 GUI pixels). Needs the world from make_test_world.txt
+# in both game directories.
+click 213 118      # main menu: Singleplayer
+shot select_world
+click 213 50       # the world
+shot select_world_selected
+click 95 222       # Rename
+shot rename_world
+click 213 202      # Cancel
+click 213 50       # the world
+click 173 222      # Delete
+shot delete_world
+click 290 140      # Cancel
+click 290 198      # Create New World...
+shot create_world
+click 213 125      # Game Mode: Hardcore
+shot create_world_hardcore
+click 213 125      # Game Mode: Creative
+shot create_world_creative
+click 213 125      # Game Mode: Survival
+click 213 197      # More World Options...
+shot create_world_more
+click 290 110      # World Type: Superflat
+shot create_world_flat
+click 290 110      # Large Biomes
+click 290 110      # Amplified
+shot create_world_amplified
+click 290 110      # Customized
+shot create_world_customized
+click 290 130      # Customize
+shot customize_page1
+wheel -5
+shot customize_page1_scrolled
+click 367 15       # Next Page
+shot customize_page2
+wheel -10
+shot customize_page2_scrolled
+click 367 15       # Next Page
+shot customize_page3
+click 367 15       # Next Page
+shot customize_page4
+click 261 223      # Presets
+shot customize_presets
+click 213 100      # Water World
+shot customize_presets_selected
+click 160 223      # Use Preset
+shot customize_after_preset
+click 120 223      # Defaults
+shot customize_defaults_confirm
+click 245 170      # No
+click 337 223      # Done
+shot create_world_after_customize

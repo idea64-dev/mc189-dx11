@@ -173,11 +173,14 @@
 
 ## Этап 5. Мир и чанки
 
-- [ ] `Chunk`, `ExtendedBlockStorage`, `NibbleArray`, хранение блок-стейтов
-- [ ] Формат Anvil: `RegionFile`, `AnvilChunkLoader` — **открываем существующие сейвы 1.8.9**
-- [ ] `WorldInfo`/`level.dat`, `SaveFormat`, `GuiSelectWorld`, `GuiCreateWorld` (включая customized-пресеты)
-- [ ] Виджеты для них: `GuiTextField` (имя мира, сид), `GuiSlider` и `GuiPageButtonList` (customized)
-- [ ] Движок освещения (sky light + block light, `checkLight`)
+- [x] `Chunk`, `ExtendedBlockStorage`, `NibbleArray`, хранение блок-стейтов; `World` (доступ к блокам, высоты, запросы света), `WorldProvider` (верхний мир, Незер, Энд), `WorldBorder`
+- [x] Формат Anvil: `RegionFile`, `AnvilChunkLoader`, поток `File IO Thread` — **сейвы 1.8.9 открываются**: мир, созданный настоящим клиентом, читается так же, как его читает Java (725 чанков, `tests/VanillaSaveTest.cpp`). Сущности, тайл-энтити и запланированные тики пока хранятся в чанке как NBT и записываются обратно без изменений (этапы 9–10)
+- [x] `WorldInfo`/`level.dat`, `GameRules`, `WorldType`, `WorldSettings`, `SaveHandler`/`AnvilSaveHandler`, `AnvilSaveConverter`; `GuiSelectWorld` (с датой в формате `SimpleDateFormat` текущей локали Windows, как у JVM), `GuiRenameWorld`, `GuiCreateWorld`, `GuiCustomizeWorldScreen` + `GuiScreenCustomizePresets` (JSON настроек — как нестрогий Gson; числа через `String.format` с локальной десятичной запятой). Конвертация миров McRegion — с биомами (этап 6); настройка суперплоского мира рисует иконки блоков — с рендером предметов (этап 7). Запуск мира — встроенный сервер (этап 9)
+- [x] Виджеты для них: `GuiTextField` (выделение — `GL_OR_REVERSE`, эмулируется точно), `GuiSlider`, `GuiListButton`, `GuiLabel`, `GuiPageButtonList`
+- [x] Движок освещения (sky light + block light, `checkLight`, `generateSkylightMap`, заселение света, перепроверки)
+- [x] Попутно: `StrictMath.sin/cos` (fdlibm) и `Math.sin/cos` как у HotSpot (x87 `FSIN`/`FCOS` при |x| ≤ π/4), `Profiler`
+
+**Готово, когда:** существующий сейв 1.8.9 читается, свет считается как в Java, экраны совпадают с ванилью. — **выполнено**: синтетический мир, построенный и отредактированный одинаково в C++ и в коде MCP, совпадает по хешам каждого чанка после каждого шага (`tests/WorldLightTest.cpp`); NBT чанков и `level.dat` побайтно равны; сценарий `tools/scenarios/worlds.txt` (список миров, переименование, удаление, создание, все страницы и пресеты customized) совпадает с кадрами настоящего клиента попиксельно — кроме фазы мигающего курсора. Тестовый мир делает `tools/scenarios/make_test_world.txt` в ванили.
 
 ## Этап 6. Генерация мира (бит в бит с Java)
 

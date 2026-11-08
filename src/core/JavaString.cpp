@@ -172,6 +172,58 @@ float parseFloat(std::string_view text)
     return negative ? -value : value;
 }
 
+std::optional<float> tryParseFloat(std::string_view text)
+{
+    // [+-]?(NaN|Infinity|decimal([eE][+-]?\d+)?[fFdD]?|hex), decimal = \d+(\.\d*)?|\.\d+
+    size_t i = 0;
+    const auto digits = [&] {
+        const size_t start = i;
+        while (i < text.size() && text[i] >= '0' && text[i] <= '9')
+            ++i;
+        return i > start;
+    };
+    if (i < text.size() && (text[i] == '+' || text[i] == '-'))
+        ++i;
+    const std::string_view rest = text.substr(i);
+    bool ok = false;
+    if (rest == "NaN" || rest == "Infinity") {
+        ok = true;
+    } else if (rest.size() > 2 && rest[0] == '0' && (rest[1] == 'x' || rest[1] == 'X')) {
+        ok = false; // hexadecimal floats: not supported by parseFloat here; Guava would accept them
+    } else {
+        bool mantissa = false;
+        if (digits()) {
+            mantissa = true;
+            if (i < text.size() && text[i] == '.') {
+                ++i;
+                digits();
+            }
+        } else if (i < text.size() && text[i] == '.') {
+            ++i;
+            mantissa = digits();
+        }
+        if (mantissa) {
+            ok = true;
+            if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
+                ++i;
+                if (i < text.size() && (text[i] == '+' || text[i] == '-'))
+                    ++i;
+                ok = digits();
+            }
+            if (ok && i < text.size() && (text[i] == 'f' || text[i] == 'F' || text[i] == 'd' || text[i] == 'D'))
+                ++i;
+            ok = ok && i == text.size();
+        }
+    }
+    if (!ok)
+        return std::nullopt;
+    try {
+        return parseFloat(text);
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    }
+}
+
 int compareTo(std::string_view a, std::string_view b)
 {
     const std::u16string ua = toUtf16(a);

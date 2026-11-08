@@ -29,12 +29,14 @@ class Framebuffer;
 class GuiScreen;
 class IResourceManager;
 class IResourcePack;
+class ISaveFormat;
 class LanguageManager;
 class ResourcePackRepository;
 class SimpleReloadableResourceManager;
 class SoundHandler;
 class TextureManager;
 class WorldClient;
+class WorldSettings;
 
 class Minecraft : public IPlayerUsage {
 public:
@@ -73,6 +75,10 @@ public:
     // Java: the player's dimension and game mode pick the music once a world exists (stage 9).
     MusicTicker::MusicType getAmbientMusicType() const { return MusicTicker::MusicType::MENU; }
     ResourcePackRepository& getResourcePackRepository() { return *mcResourcePackRepository; }
+    ISaveFormat& getSaveLoader() { return *saveLoader; }
+    // Opens (or with settings, creates) a world and starts the integrated server for it. A null settings
+    // pointer is Java's null: the world must exist.
+    void launchIntegratedServer(const std::string& folderName, const std::string& worldName, const WorldSettings* worldSettingsIn);
     PlayerUsageSnooper& getPlayerUsageSnooper() { return *usageSnooper; }
     // Java: getIntegratedServer().getPlayerUsageSnooper(). Vanilla creates an idle IntegratedServer at startup,
     // so the snooper screen lists its stats even in the main menu.
@@ -148,6 +154,7 @@ private:
     int64_t debugUpdateTime;
     int64_t startNanoTime;
     std::unique_ptr<PlayerUsageSnooper> usageSnooper;
+    std::unique_ptr<ISaveFormat> saveLoader;
     std::unique_ptr<IPlayerUsage> integratedServer;
     std::unique_ptr<PlayerUsageSnooper> integratedServerSnooper;
 };

@@ -58,6 +58,10 @@ struct StringLess {
     bool operator()(std::string_view a, std::string_view b) const { return compareTo(a, b) < 0; }
 };
 
+// Guava's Floats.tryParse: Float.parseFloat for strings matching Java's float literal syntax (no surrounding
+// whitespace), nullopt otherwise.
+std::optional<float> tryParseFloat(std::string_view text);
+
 // String.trim(): strips characters <= ' ' from both ends (UTF-8 bytes of non-ASCII characters are all above).
 std::string trim(std::string_view text);
 

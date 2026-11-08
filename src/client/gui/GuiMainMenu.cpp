@@ -5,6 +5,7 @@
 #include "client/gui/GuiErrorScreen.h"
 #include "client/gui/GuiLanguage.h"
 #include "client/gui/GuiOptions.h"
+#include "client/gui/GuiSelectWorld.h"
 #include "client/renderer/DxStateManager.h"
 #include "client/renderer/Tessellator.h"
 #include "client/renderer/texture/SimpleTexture.h"
@@ -135,7 +136,7 @@ void GuiMainMenu::actionPerformed(GuiButton& button)
     if (button.id == 5)
         mc->displayGuiScreen(std::make_shared<GuiLanguage>(shared_from_this(), *mc->gameSettings, mc->getLanguageManager()));
     if (button.id == 1)
-        mc->displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("menu.singleplayer"), "stage 5"));
+        mc->displayGuiScreen(std::make_shared<GuiSelectWorld>(shared_from_this()));
     if (button.id == 2)
         mc->displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("menu.multiplayer"), "stage 14"));
     if (button.id == 14 && realmsButton->visible)

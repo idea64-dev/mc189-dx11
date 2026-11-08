@@ -2,6 +2,7 @@
 
 #include "client/audio/SoundHandler.h"
 #include "client/gui/FontRenderer.h"
+#include "client/gui/GuiErrorScreen.h"
 #include "client/gui/GuiControls.h"
 #include "client/gui/GuiMainMenu.h"
 #include "client/gui/GuiScreen.h"
@@ -31,6 +32,10 @@
 #include "platform/Sys.h"
 #include "render/gl/GL.h"
 #include "util/ScreenShotHelper.h"
+#include "world/WorldSettings.h"
+#include "world/storage/ISaveHandler.h"
+#include "world/storage/SaveFormat.h"
+#include "world/storage/WorldInfo.h"
 
 #include <Windows.h>
 #include <d3d11.h>
@@ -181,7 +186,8 @@ void Minecraft::startGame()
     mcResourceManager->registerReloadListener(*renderEngine);
     drawSplashScreen(*renderEngine);
 
-    // Java: skinManager, saveLoader (stage 5)
+    // Java: skinManager (stage 10)
+    saveLoader = std::make_unique<AnvilSaveConverter>(mcDataDir / "saves");
     mcSoundHandler = std::make_unique<SoundHandler>(*mcResourceManager, *gameSettings);
     mcResourceManager->registerReloadListener(*mcSoundHandler);
     mcMusicTicker = std::make_unique<MusicTicker>(*this);
@@ -693,6 +699,20 @@ void Minecraft::addServerTypeToSnooper(PlayerUsageSnooper& playerSnooper)
     playerSnooper.addStatToSnooper("launched_version", launchedVersion);
     // Java also lists ~150 gl_caps[...] OpenGL extension flags, which have no Direct3D meaning.
     playerSnooper.addStatToSnooper("gl_max_texture_size", std::to_string(D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION));
+}
+
+void Minecraft::launchIntegratedServer(const std::string& folderName, const std::string& /*worldName*/, const WorldSettings* worldSettingsIn)
+{
+    // Java: loadWorld(null) first -- with the client world (stage 9).
+    const std::shared_ptr<ISaveHandler> isavehandler = saveLoader->getSaveLoader(folderName, false);
+    std::unique_ptr<WorldInfo> worldinfo = isavehandler->loadWorldInfo();
+    if (!worldinfo && worldSettingsIn) {
+        worldinfo = std::make_unique<WorldInfo>(*worldSettingsIn, folderName);
+        isavehandler->saveWorldInfo(*worldinfo);
+    }
+    // Java: new IntegratedServer(this, folderName, worldName, settings).startServerThread() and the
+    // GuiScreenWorking/connecting screens -- the integrated server is stage 9.
+    displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("menu.singleplayer"), "stage 9"));
 }
 
 } // namespace mc

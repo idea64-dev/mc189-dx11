@@ -1,0 +1,17 @@
+# Vanilla only: creates the world "New World" (seed 1234) used by worlds.txt, then saves and quits to the title.
+# Copy run/cmp/vanilla/game/saves to run/cmp/port/game/saves afterwards.
+click 213 118      # main menu: Singleplayer
+click 290 198      # Create New World...
+click 213 197      # More World Options...
+click 213 70       # seed field
+key 2              # 1
+key 3              # 2
+key 4              # 3
+key 5              # 4
+click 213 197      # Done
+click 130 222      # Create New World
+wait 40000
+key 1              # Esc: pause menu
+wait 1000
+click 213 174      # Save and Quit to Title
+wait 8000
