@@ -2,8 +2,7 @@
 
 // Original: net/minecraft/client/gui/FontRenderer.java
 // Strings are UTF-8 at the API and UTF-16 inside, because the original measures and indexes Java chars
-// (surrogate halves included). Right-to-left reordering (bidiReorder, ICU) is not ported yet: Arabic and
-// Hebrew text renders in logical order until the language screen arrives (stage 3).
+// (surrogate halves included). Right-to-left text goes through ICU like the original (Windows' icu.dll).
 
 #include "client/resources/IResourceManager.h"
 #include "util/Random.h"
@@ -55,6 +54,7 @@ private:
     float renderUnicodeChar(char16_t ch, bool italic);
     void resetStyles();
     void renderStringAtPos(std::u16string_view text, bool shadow);
+    static std::u16string bidiReorder(std::u16string_view text);
     int renderStringAligned(std::u16string_view text, int x, int y, int width, int color, bool dropShadow);
     int renderString(std::u16string_view text, float x, float y, int color, bool dropShadow);
     void renderSplitString(std::u16string_view str, int x, int y, int wrapWidth, bool addShadow);

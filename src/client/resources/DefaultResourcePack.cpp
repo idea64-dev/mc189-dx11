@@ -1,5 +1,6 @@
 #include "client/resources/DefaultResourcePack.h"
 
+#include "client/renderer/texture/TextureUtil.h"
 #include "core/ZipArchive.h"
 
 #include <fstream>
@@ -52,11 +53,25 @@ std::optional<nlohmann::json> DefaultResourcePack::getPackMetadata(const std::st
     std::ifstream stream(it->second, std::ios::binary);
     if (!stream)
         return std::nullopt;
-    const nlohmann::json root = nlohmann::json::parse(stream);
-    const auto found = root.find(section);
-    if (found == root.end())
-        return std::nullopt;
-    return *found;
+    try {
+        const nlohmann::json root = nlohmann::json::parse(stream, nullptr, true, true);
+        if (!root.is_object())
+            return std::nullopt;
+        const auto found = root.find(section);
+        if (found == root.end() || !found->is_object())
+            return std::nullopt;
+        return *found;
+    } catch (const nlohmann::json::exception&) {
+        return std::nullopt; // Java: RuntimeException -> null
+    }
+}
+
+BufferedImage DefaultResourcePack::getPackImage() const
+{
+    const auto data = clientJar->read("pack.png");
+    if (!data)
+        throw ResourceNotFoundException("pack.png");
+    return TextureUtil::readBufferedImage(*data);
 }
 
 bool DefaultResourcePack::resourceExists(const ResourceLocation& location) const

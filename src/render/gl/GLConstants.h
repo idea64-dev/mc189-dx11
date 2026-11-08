@@ -17,6 +17,11 @@ inline constexpr int GL_QUADS = 0x0007;
 inline constexpr int GL_QUAD_STRIP = 0x0008;
 inline constexpr int GL_POLYGON = 0x0009;
 
+// glGetString
+inline constexpr int GL_VENDOR = 0x1F00;
+inline constexpr int GL_RENDERER = 0x1F01;
+inline constexpr int GL_VERSION = 0x1F02;
+
 // Clear bits
 inline constexpr int GL_DEPTH_BUFFER_BIT = 0x00000100;
 inline constexpr int GL_STENCIL_BUFFER_BIT = 0x00000400;

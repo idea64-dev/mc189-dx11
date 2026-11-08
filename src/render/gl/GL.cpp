@@ -15,6 +15,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <format>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -827,6 +828,30 @@ void initialize(RenderDevice& device)
     });
 
     Log::info("OpenGL 1.x emulation on Direct3D 11 initialized ({}x{})", s.windowColor.width, s.windowColor.height);
+}
+
+std::string glGetString(int name)
+{
+    const State& s = state();
+    if (s.device == nullptr)
+        return {};
+    const AdapterInfo& adapter = s.device->getAdapterInfo();
+    switch (name) {
+    case GL_VENDOR:
+        switch (adapter.vendorId) {
+        case 0x10DE: return "NVIDIA Corporation";
+        case 0x1002: return "ATI Technologies Inc.";
+        case 0x8086: return "Intel";
+        case 0x1414: return "Microsoft";
+        default: return std::format("PCI vendor {:04X}", adapter.vendorId);
+        }
+    case GL_RENDERER:
+        return adapter.description;
+    case GL_VERSION:
+        return std::format("Direct3D {}.{} (OpenGL 1.x emulation)", (adapter.featureLevel >> 12) & 0xF, (adapter.featureLevel >> 8) & 0xF);
+    default:
+        return {};
+    }
 }
 
 void shutdown()

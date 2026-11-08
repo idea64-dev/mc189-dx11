@@ -7,6 +7,7 @@
 
 #include "client/main/GameConfiguration.h"
 #include "client/settings/GameSettings.h"
+#include "profiler/PlayerUsageSnooper.h"
 #include "util/MouseHelper.h"
 #include "util/ResourceLocation.h"
 #include "util/Timer.h"
@@ -28,12 +29,13 @@ class GuiScreen;
 class IResourceManager;
 class IResourcePack;
 class LanguageManager;
+class ResourcePackRepository;
 class SimpleReloadableResourceManager;
 class SoundHandler;
 class TextureManager;
 class WorldClient;
 
-class Minecraft {
+class Minecraft : public IPlayerUsage {
 public:
     explicit Minecraft(const GameConfiguration& gameConfig);
     ~Minecraft();
@@ -66,6 +68,15 @@ public:
     Framebuffer& getFramebuffer() { return *framebufferMc; }
     LanguageManager& getLanguageManager() { return *mcLanguageManager; }
     SoundHandler& getSoundHandler() { return *mcSoundHandler; }
+    ResourcePackRepository& getResourcePackRepository() { return *mcResourcePackRepository; }
+    PlayerUsageSnooper& getPlayerUsageSnooper() { return *usageSnooper; }
+    // Java: getIntegratedServer().getPlayerUsageSnooper(). Vanilla creates an idle IntegratedServer at startup,
+    // so the snooper screen lists its stats even in the main menu.
+    PlayerUsageSnooper* getIntegratedServerSnooper() { return integratedServerSnooper.get(); }
+    void addServerStatsToSnooper(PlayerUsageSnooper& playerSnooper) override;
+    void addServerTypeToSnooper(PlayerUsageSnooper& playerSnooper) override;
+    bool isSnooperEnabled() const override { return gameSettings->snooperEnabled; }
+    bool hasSoundHandler() const { return mcSoundHandler != nullptr; }
     const IResourceManager& getResourceManager() const;
     bool isUnicode() const;
     bool isFullScreen() const { return fullscreen; }
@@ -113,9 +124,11 @@ private:
     int tempDisplayWidth;
     int tempDisplayHeight;
     std::filesystem::path mcDataDir;
+    std::filesystem::path fileResourcepacks;
     std::string launchedVersion;
     std::shared_ptr<DefaultResourcePack> mcDefaultResourcePack;
     std::vector<std::shared_ptr<IResourcePack>> defaultResourcePacks;
+    std::unique_ptr<ResourcePackRepository> mcResourcePackRepository;
     std::unique_ptr<SimpleReloadableResourceManager> mcResourceManager;
     std::unique_ptr<LanguageManager> mcLanguageManager;
     std::unique_ptr<TextureManager> renderEngine;
@@ -129,6 +142,9 @@ private:
     int fpsCounter = 0;
     int64_t debugUpdateTime;
     int64_t startNanoTime;
+    std::unique_ptr<PlayerUsageSnooper> usageSnooper;
+    std::unique_ptr<IPlayerUsage> integratedServer;
+    std::unique_ptr<PlayerUsageSnooper> integratedServerSnooper;
 };
 
 } // namespace mc

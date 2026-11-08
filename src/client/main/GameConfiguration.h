@@ -16,6 +16,7 @@ struct GameConfiguration {
 
     struct FolderInformation {
         std::filesystem::path mcDataDir;
+        std::filesystem::path resourcePacksDir;
         std::filesystem::path assetsDir;
         std::string assetIndex = "1.8";
         // Port addition: Java had the client jar on its classpath.

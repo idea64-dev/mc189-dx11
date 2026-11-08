@@ -12,6 +12,8 @@
 #include "core/StringUtil.h"
 #include "render/gl/GL.h"
 
+#include <icu.h>
+
 #include <format>
 #include <stdexcept>
 
@@ -371,17 +373,63 @@ void FontRenderer::renderStringAtPos(std::u16string_view text, bool shadow)
     }
 }
 
+std::u16string FontRenderer::bidiReorder(std::u16string_view text)
+{
+    // Java (ICU4J): new Bidi(new ArabicShaping(LETTERS_SHAPE).shape(text), DIRECTION_DEFAULT_RIGHT_TO_LEFT),
+    // setReorderingMode(REORDER_DEFAULT), writeReordered(DO_MIRRORING). Windows ships the same ICU as icu.dll.
+    // A shaping failure returns the text unchanged, like Java's ArabicShapingException handler.
+    const auto* source = reinterpret_cast<const UChar*>(text.data());
+    const auto length = static_cast<int32_t>(text.size());
+    if (length == 0)
+        return {};
+
+    UErrorCode status = U_ZERO_ERROR;
+    const int32_t shapedLength = u_shapeArabic(source, length, nullptr, 0, U_SHAPE_LETTERS_SHAPE, &status);
+    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status))
+        return std::u16string(text);
+    std::u16string shaped(static_cast<size_t>(shapedLength), u'\0');
+    status = U_ZERO_ERROR;
+    u_shapeArabic(source, length, reinterpret_cast<UChar*>(shaped.data()), shapedLength, U_SHAPE_LETTERS_SHAPE, &status);
+    if (U_FAILURE(status))
+        return std::u16string(text);
+
+    UBiDi* bidi = ubidi_open();
+    if (bidi == nullptr)
+        return shaped;
+    std::u16string result;
+    status = U_ZERO_ERROR;
+    ubidi_setPara(bidi, reinterpret_cast<const UChar*>(shaped.data()), shapedLength, UBIDI_DEFAULT_RTL, nullptr, &status);
+    ubidi_setReorderingMode(bidi, UBIDI_REORDER_DEFAULT);
+    if (U_SUCCESS(status)) {
+        const int32_t outLength = ubidi_writeReordered(bidi, nullptr, 0, UBIDI_DO_MIRRORING, &status);
+        if (status == U_BUFFER_OVERFLOW_ERROR || U_SUCCESS(status)) {
+            result.assign(static_cast<size_t>(outLength), u'\0');
+            status = U_ZERO_ERROR;
+            ubidi_writeReordered(bidi, reinterpret_cast<UChar*>(result.data()), outLength, UBIDI_DO_MIRRORING, &status);
+        }
+    }
+    ubidi_close(bidi);
+    return U_SUCCESS(status) ? result : shaped;
+}
+
 int FontRenderer::renderStringAligned(std::u16string_view text, int x, int y, int width, int color, bool dropShadow)
 {
     if (bidiFlag) {
-        const int i = getStringWidth16(text); // Java measures the reordered text (same width)
+        const int i = getStringWidth16(bidiReorder(text));
         x = x + width - i;
     }
     return renderString(text, static_cast<float>(x), static_cast<float>(y), color, dropShadow);
 }
 
-int FontRenderer::renderString(std::u16string_view text, float x, float y, int color, bool dropShadow)
+int FontRenderer::renderString(std::u16string_view textIn, float x, float y, int color, bool dropShadow)
 {
+    std::u16string reordered;
+    std::u16string_view text = textIn;
+    if (bidiFlag) {
+        reordered = bidiReorder(textIn);
+        text = reordered;
+    }
+
     if ((color & -67108864) == 0)
         color |= -16777216;
     if (dropShadow)

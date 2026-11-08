@@ -14,6 +14,8 @@ class RenderDevice;
 struct DisplayMode {
     int width = 0;
     int height = 0;
+    // Refresh rate in Hz; 0 for windowed modes, like LWJGL's DisplayMode(width, height).
+    int frequency = 0;
 };
 
 // Window icon image, 0xAARRGGBB pixels, rows top to bottom.

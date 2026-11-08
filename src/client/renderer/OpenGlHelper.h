@@ -13,6 +13,8 @@ class OpenGlHelper {
 public:
     static constexpr int defaultTexUnit = GL::GL_TEXTURE0;
     static constexpr int lightmapTexUnit = GL::GL_TEXTURE1;
+    // Vertex buffers always exist on D3D11, so the video settings offer "Use VBOs" like on any modern GL driver.
+    static constexpr bool vboSupported = true;
 
     static void setActiveTexture(int texture) { GL::glActiveTexture(texture); }
     // Client-side texture unit selection only matters for vertex arrays, which the emulation fills directly.

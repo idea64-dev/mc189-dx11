@@ -52,7 +52,7 @@ void LanguageManager::onResourceManagerReload(const IResourceManager& resourceMa
     if (currentLanguage != "en_US")
         list.push_back(currentLanguage);
     currentLocale.loadLocaleDataFiles(resourceManager, list);
-    // Java: StringTranslate.replaceWith(currentLocale.properties) for the integrated server (stage 9).
+    // Java: StringTranslate.replaceWith(currentLocale.properties); StatCollector reads currentLocale directly.
 }
 
 bool LanguageManager::isCurrentLanguageBidirectional() const

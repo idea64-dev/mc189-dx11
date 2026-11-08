@@ -3,6 +3,8 @@
 #include "client/Minecraft.h"
 #include "client/gui/FontRenderer.h"
 #include "client/gui/GuiErrorScreen.h"
+#include "client/gui/GuiLanguage.h"
+#include "client/gui/GuiOptions.h"
 #include "client/renderer/DxStateManager.h"
 #include "client/renderer/Tessellator.h"
 #include "client/renderer/texture/SimpleTexture.h"
@@ -129,9 +131,9 @@ void GuiMainMenu::addSingleplayerMultiplayerButtons(int y, int spacing)
 void GuiMainMenu::actionPerformed(GuiButton& button)
 {
     if (button.id == 0)
-        mc->displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("options.title"), "stage 3"));
+        mc->displayGuiScreen(std::make_shared<GuiOptions>(shared_from_this(), *mc->gameSettings));
     if (button.id == 5)
-        mc->displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("options.language"), "stage 3"));
+        mc->displayGuiScreen(std::make_shared<GuiLanguage>(shared_from_this(), *mc->gameSettings, mc->getLanguageManager()));
     if (button.id == 1)
         mc->displayGuiScreen(GuiErrorScreen::notPortedYet(I18n::format("menu.singleplayer"), "stage 5"));
     if (button.id == 2)

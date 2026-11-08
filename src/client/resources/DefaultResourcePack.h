@@ -26,8 +26,10 @@ public:
     std::optional<std::vector<uint8_t>> getInputStreamAssets(const ResourceLocation& location) const;
     bool resourceExists(const ResourceLocation& location) const override;
     std::set<std::string> getResourceDomains() const override { return { "minecraft", "realms" }; }
-    // Java reads pack.mcmeta from the asset index (it lists the available languages).
+    // Java reads pack.mcmeta from the asset index (it lists the available languages); any error gives nullopt.
     std::optional<nlohmann::json> getPackMetadata(const std::string& section) const override;
+    // pack.png from the root of the jar.
+    BufferedImage getPackImage() const override;
     std::string getPackName() const override { return "Default"; }
 
 private:

@@ -41,6 +41,7 @@ mc::GameConfiguration parseArguments(const std::vector<std::string>& arguments, 
     mc::GameConfiguration config;
     std::filesystem::path gameDir = ".";
     std::filesystem::path assetsDir;
+    std::filesystem::path resourcePackDir;
 
     for (size_t i = 0; i < arguments.size(); ++i) {
         const std::string& argument = arguments[i];
@@ -56,6 +57,8 @@ mc::GameConfiguration parseArguments(const std::vector<std::string>& arguments, 
             gameDir = mc::toWide(arguments[++i]);
         } else if (argument == "--assetsDir" && hasValue) {
             assetsDir = mc::toWide(arguments[++i]);
+        } else if (argument == "--resourcePackDir" && hasValue) {
+            resourcePackDir = mc::toWide(arguments[++i]);
         } else if (argument == "--clientJar" && hasValue) {
             config.folderInfo.clientJar = mc::toWide(arguments[++i]);
         } else if (argument == "--assetIndex" && hasValue) {
@@ -69,6 +72,7 @@ mc::GameConfiguration parseArguments(const std::vector<std::string>& arguments, 
 
     config.folderInfo.mcDataDir = gameDir;
     config.folderInfo.assetsDir = assetsDir;
+    config.folderInfo.resourcePacksDir = resourcePackDir.empty() ? gameDir / "resourcepacks" : resourcePackDir;
     return config;
 }
 

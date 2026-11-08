@@ -1,8 +1,8 @@
 #pragma once
 
 // Original: net/minecraft/client/resources/IResourcePack.java
-// Pack images arrive with the resource pack screen (ROADMAP stage 3).
 
+#include "client/renderer/texture/BufferedImage.h"
 #include "util/ResourceLocation.h"
 
 #include <nlohmann/json.hpp>
@@ -33,8 +33,11 @@ public:
     virtual std::vector<uint8_t> getInputStream(const ResourceLocation& location) const = 0;
     virtual bool resourceExists(const ResourceLocation& location) const = 0;
     virtual std::set<std::string> getResourceDomains() const = 0;
-    // The "<section>" object of the pack's pack.mcmeta, or nullopt. Throws on malformed JSON.
+    // The "<section>" object of the pack's pack.mcmeta, or nullopt. Throws on malformed JSON or a section that
+    // isn't an object.
     virtual std::optional<nlohmann::json> getPackMetadata(const std::string& section) const = 0;
+    // pack.png; throws when it is missing or unreadable.
+    virtual BufferedImage getPackImage() const = 0;
     virtual std::string getPackName() const = 0;
 };
 

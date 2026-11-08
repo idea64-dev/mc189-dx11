@@ -39,7 +39,7 @@ run.bat release --fullscreen
 ```
 
 Аргументы как у оригинала: `--width`, `--height`, `--fullscreen`, `--gameDir`, `--assetsDir`, `--assetIndex`,
-`--version`; плюс `--clientJar`. Лог пишется в `<gameDir>\logs\latest.log` и в консоль, если игра запущена
+`--resourcePackDir`, `--version`; плюс `--clientJar`. Ресурспаки (zip и папки) лежат в `<gameDir>\resourcepacks\`. Лог пишется в `<gameDir>\logs\latest.log` и в консоль, если игра запущена
 из cmd/PowerShell. При падении minidump сохраняется в `<gameDir>\crash-reports\`.
 
 ## Тесты
@@ -57,6 +57,12 @@ powershell -ExecutionPolicy Bypass -File tools\smoke_test.ps1    :: окно: з
 Сравнение с оригиналом по кадрам: `tools/reference/run_vanilla.ps1 -Output run/vanilla_menu.png` запускает
 настоящий клиент 1.8.9 из установки (Java 8, офлайн, отдельная папка `run_vanilla/`) и сохраняет снимок по F2;
 `python tools/compare_screens.py run/vanilla_menu.png run/smoke_1_start.png` сравнивает его с кадром порта.
+
+Сценарии по экранам: `tools/ui_scenario.ps1 -Target vanilla|port -Scenario tools/scenarios/options.txt` проходит
+по экранам кликами и колесом мыши в чистой игровой папке `run/cmp/<target>/game` и снимает кадры по F2 в
+`run/cmp/<target>/`; `python tools/compare_screens.py --full run/cmp/vanilla run/cmp/port` сравнивает кадры целиком
+и пишет `*_diff.png` с отличающимися пикселями. Для `tools/scenarios/resourcepacks.txt` сначала нужен
+`python tools/scenarios/make_test_packs.py` (самодельные тестовые паки).
 
 ## Структура
 

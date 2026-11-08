@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace mc {
@@ -36,6 +37,9 @@ namespace GL {
 // Context lifetime (Display::create / Display::destroy).
 void initialize(RenderDevice& device);
 void shutdown();
+
+// GL_VENDOR, GL_RENDERER and GL_VERSION describe the Direct3D adapter (the snooper reports them).
+std::string glGetString(int name);
 
 // --- Capabilities ---
 void glEnable(int capability);

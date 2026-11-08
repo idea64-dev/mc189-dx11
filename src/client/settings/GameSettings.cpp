@@ -1,6 +1,7 @@
 #include "client/settings/GameSettings.h"
 
 #include "client/Minecraft.h"
+#include "client/audio/SoundHandler.h"
 #include "client/resources/Locale.h"
 #include "core/Java.h"
 #include "core/JavaString.h"
@@ -243,7 +244,8 @@ GameSettings::GameSettings(Minecraft* mcIn, const std::filesystem::path& options
     , optionsFile(optionsDir / "options.txt")
 {
     initKeyBindings();
-    // Java: 32 chunks when running on a 64-bit JVM with at least 1 GB of heap, which is always true here.
+    // Java: 32 chunks on a 64-bit JVM with a heap of at least 10^9 bytes (-Xmx2G and up; the launcher default
+    // -Xmx1G gives 16). Native code has no heap limit, so the port takes the larger range.
     Options::RENDER_DISTANCE.setValueMax(32.0f);
     renderDistanceChunks = 12;
     loadOptions();
@@ -747,7 +749,9 @@ float GameSettings::getSoundLevel(SoundCategory category) const
 
 void GameSettings::setSoundLevel(SoundCategory category, float soundLevel)
 {
-    // Java: mc.getSoundHandler().setSoundLevel(category, level) (stage 3)
+    // The sound manager reads the old level from the map, so non-master changes apply one step late, as in Java.
+    if (mc != nullptr && mc->hasSoundHandler())
+        mc->getSoundHandler().setSoundLevel(category, soundLevel);
     mapSoundLevels[category] = soundLevel;
 }
 

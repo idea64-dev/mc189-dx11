@@ -71,7 +71,7 @@ target_compile_definitions(mc_engine PUBLIC
 target_compile_options(mc_engine PUBLIC /W4 /permissive- /utf-8 /fp:precise)
 target_link_libraries(mc_engine
     PUBLIC d3d11 dxgi dxguid
-    PRIVATE miniz stb_vorbis third_party_headers dbghelp bcrypt xaudio2
+    PRIVATE miniz stb_vorbis third_party_headers dbghelp bcrypt xaudio2 rpcrt4 icu
 )
 
 # --- Game ---

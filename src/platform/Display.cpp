@@ -712,9 +712,12 @@ DisplayMode Display::getDesktopDisplayMode()
     const DisplayState& s = state();
     const HMONITOR handle = s.hwnd ? MonitorFromWindow(s.hwnd, MONITOR_DEFAULTTONEAREST)
                                    : MonitorFromPoint(POINT { 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFO monitor { sizeof(MONITORINFO) };
+    MONITORINFOEXW monitor {};
+    monitor.cbSize = sizeof(monitor);
     GetMonitorInfoW(handle, &monitor);
-    return DisplayMode { monitor.rcMonitor.right - monitor.rcMonitor.left, monitor.rcMonitor.bottom - monitor.rcMonitor.top };
+    DEVMODEW devMode { .dmSize = sizeof(DEVMODEW) };
+    const int frequency = EnumDisplaySettingsW(monitor.szDevice, ENUM_CURRENT_SETTINGS, &devMode) ? static_cast<int>(devMode.dmDisplayFrequency) : 0;
+    return DisplayMode { monitor.rcMonitor.right - monitor.rcMonitor.left, monitor.rcMonitor.bottom - monitor.rcMonitor.top, frequency };
 }
 
 void Display::setFullscreen(bool fullscreen)

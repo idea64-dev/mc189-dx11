@@ -2,11 +2,13 @@
 
 #include "client/audio/SoundHandler.h"
 #include "client/gui/FontRenderer.h"
+#include "client/gui/GuiControls.h"
 #include "client/gui/GuiMainMenu.h"
 #include "client/gui/GuiScreen.h"
 #include "client/gui/ScaledResolution.h"
 #include "client/renderer/DxStateManager.h"
 #include "client/renderer/EntityRenderer.h"
+#include "client/renderer/OpenGlHelper.h"
 #include "client/renderer/Tessellator.h"
 #include "client/renderer/texture/SimpleTexture.h"
 #include "client/renderer/texture/TextureManager.h"
@@ -16,6 +18,7 @@
 #include "client/resources/LanguageManager.h"
 #include "client/resources/Locale.h"
 #include "client/resources/ResourceIndex.h"
+#include "client/resources/ResourcePackRepository.h"
 #include "client/resources/SimpleReloadableResourceManager.h"
 #include "client/shader/Framebuffer.h"
 #include "core/Log.h"
@@ -29,8 +32,10 @@
 #include "util/ScreenShotHelper.h"
 
 #include <Windows.h>
+#include <d3d11.h>
 
 #include <algorithm>
+#include <chrono>
 #include <format>
 #include <stdexcept>
 #include <thread>
@@ -40,6 +45,48 @@ namespace mc {
 namespace {
 
 const ResourceLocation locationMojangPng("textures/gui/title/mojang.png");
+
+// Java: MinecraftServer.getCurrentTimeMillis()
+int64_t currentTimeMillis()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// Java: the IntegratedServer that Minecraft's constructor creates before any world exists. Until a world is
+// loaded (stage 9) only its snooper is visible, on the Snooper Settings screen.
+class IdleIntegratedServer : public IPlayerUsage {
+public:
+    explicit IdleIntegratedServer(Minecraft& mcIn)
+        : mc(mcIn)
+    {
+    }
+
+    void addServerStatsToSnooper(PlayerUsageSnooper& playerSnooper) override
+    {
+        playerSnooper.addClientStat("whitelist_enabled", "false");
+        playerSnooper.addClientStat("whitelist_count", "0");
+        playerSnooper.addClientStat("uses_auth", "false");
+        playerSnooper.addClientStat("gui_state", "disabled");
+        // Java's "/ 60L * 1000L" (meant to be minutes) kept as is.
+        playerSnooper.addClientStat("run_time", std::to_string((currentTimeMillis() - playerSnooper.getMinecraftStartTimeMillis()) / 60LL * 1000LL));
+        playerSnooper.addClientStat("avg_tick_ms", "0");
+        playerSnooper.addClientStat("worlds", "0");
+        playerSnooper.addClientStat("snooper_partner", mc.getPlayerUsageSnooper().getUniqueID());
+    }
+
+    void addServerTypeToSnooper(PlayerUsageSnooper& playerSnooper) override
+    {
+        playerSnooper.addStatToSnooper("singleplayer", "true");
+        playerSnooper.addStatToSnooper("server_brand", "vanilla");
+        playerSnooper.addStatToSnooper("gui_supported", "supported");
+        playerSnooper.addStatToSnooper("dedicated", "false");
+    }
+
+    bool isSnooperEnabled() const override { return mc.isSnooperEnabled(); }
+
+private:
+    Minecraft& mc;
+};
 
 } // namespace
 
@@ -53,11 +100,15 @@ Minecraft::Minecraft(const GameConfiguration& gameConfig)
     , tempDisplayWidth(gameConfig.displayInfo.width)
     , tempDisplayHeight(gameConfig.displayInfo.height)
     , mcDataDir(gameConfig.folderInfo.mcDataDir)
+    , fileResourcepacks(gameConfig.folderInfo.resourcePacksDir)
     , launchedVersion(gameConfig.gameInfo.version)
     , debugUpdateTime(getSystemTime())
     , startNanoTime(Sys::nanoTime())
 {
     theMinecraft = this;
+    usageSnooper = std::make_unique<PlayerUsageSnooper>("client", *this, currentTimeMillis());
+    integratedServer = std::make_unique<IdleIntegratedServer>(*this);
+    integratedServerSnooper = std::make_unique<PlayerUsageSnooper>("server", *integratedServer, currentTimeMillis());
     mcDefaultResourcePack = std::make_shared<DefaultResourcePack>(
         std::make_shared<const ZipArchive>(gameConfig.folderInfo.clientJar),
         ResourceIndex(gameConfig.folderInfo.assetsDir, gameConfig.folderInfo.assetIndex).getResourceMap());
@@ -119,7 +170,7 @@ void Minecraft::startGame()
     framebufferMc = std::make_unique<Framebuffer>(displayWidth, displayHeight, true);
     framebufferMc->setFramebufferColor(0.0f, 0.0f, 0.0f, 0.0f);
     defaultResourcePacks.push_back(mcDefaultResourcePack);
-    // Java: ResourcePackRepository (stage 3)
+    mcResourcePackRepository = std::make_unique<ResourcePackRepository>(fileResourcepacks, mcDataDir / "server-resource-packs", mcDefaultResourcePack, *gameSettings);
     mcResourceManager = std::make_unique<SimpleReloadableResourceManager>();
     mcLanguageManager = std::make_unique<LanguageManager>(gameSettings->language);
     mcResourceManager->registerReloadListener(*mcLanguageManager);
@@ -177,13 +228,18 @@ void Minecraft::startGame()
 
 void Minecraft::refreshResources()
 {
-    // Java also adds the resource packs selected in the repository (stage 3).
     std::vector<std::shared_ptr<IResourcePack>> list = defaultResourcePacks;
+    for (const auto& entry : mcResourcePackRepository->getRepositoryEntries())
+        list.push_back(entry->getResourcePack());
+    if (auto serverPack = mcResourcePackRepository->getResourcePackInstance())
+        list.push_back(std::move(serverPack));
+
     try {
         mcResourceManager->reloadResources(list);
     } catch (const std::exception& e) {
         Log::info("Caught error stitching, removing all assigned resourcepacks ({})", e.what());
         list = defaultResourcePacks;
+        mcResourcePackRepository->setRepositories({});
         mcResourceManager->reloadResources(list);
         gameSettings->resourcePacks.clear();
         gameSettings->incompatibleResourcePacks.clear();
@@ -349,14 +405,18 @@ void Minecraft::runGameLoop()
     while (getSystemTime() >= debugUpdateTime + 1000LL) {
         debugFPS = fpsCounter;
         const bool unlimited = static_cast<float>(gameSettings->limitFramerate) == GameSettings::Options::FRAMERATE_LIMIT.getValueMax();
-        debug = std::format("{} fps ({} chunk update{}) T: {}{}{}{}",
+        debug = std::format("{} fps ({} chunk update{}) T: {}{}{}{}{}",
             debugFPS, 0, "s",
             unlimited ? std::string("inf") : std::to_string(gameSettings->limitFramerate),
             gameSettings->enableVsync ? " vsync" : "",
             gameSettings->fancyGraphics ? "" : " fast",
-            gameSettings->clouds == 0 ? "" : (gameSettings->clouds == 1 ? " fast-clouds" : " fancy-clouds"));
+            gameSettings->clouds == 0 ? "" : (gameSettings->clouds == 1 ? " fast-clouds" : " fancy-clouds"),
+            OpenGlHelper::vboSupported && gameSettings->useVbo ? " vbo" : "");
         debugUpdateTime += 1000LL;
         fpsCounter = 0;
+        usageSnooper->addMemoryStatsToSnooper();
+        if (!usageSnooper->isSnooperRunning())
+            usageSnooper->startSnooper();
     }
 
     if (isFramerateLimitBelowMax())
@@ -479,8 +539,9 @@ void Minecraft::dispatchKeypresses()
     const int i = Keyboard::getEventKey() == 0 ? Keyboard::getEventCharacter() : Keyboard::getEventKey();
 
     if (i != 0 && !Keyboard::isRepeatEvent()) {
-        // Java: GuiControls swallows the key for 20 ms after a rebind (stage 3).
-        if (Keyboard::getEventKeyState()) {
+        // A key just assigned on the controls screen doesn't also trigger its old action.
+        const auto* controls = dynamic_cast<const GuiControls*>(currentScreen.get());
+        if ((controls == nullptr || controls->time <= getSystemTime() - 20LL) && Keyboard::getEventKeyState()) {
             if (i == gameSettings->keyBindFullscreen.getKeyCode()) {
                 toggleFullscreen();
             } else if (i == gameSettings->keyBindScreenshot.getKeyCode()) {
@@ -582,6 +643,7 @@ void Minecraft::shutdownMinecraftApplet()
 
     // GL objects go before the context, like the JVM releasing them before Display.destroy().
     currentScreen.reset();
+    mcResourcePackRepository.reset();
     entityRenderer.reset();
     fontRendererObj.reset();
     standardGalacticFontRenderer.reset();
@@ -600,6 +662,34 @@ void Minecraft::displayCrashReport(const std::string& description, const std::ex
     Log::fatal("{}: {}", description, cause.what());
     const std::wstring text = toWide(std::format("{}\n\n{}", description, cause.what()));
     MessageBoxW(nullptr, text.c_str(), L"Minecraft has crashed!", MB_OK | MB_ICONERROR);
+}
+
+void Minecraft::addServerStatsToSnooper(PlayerUsageSnooper& playerSnooper)
+{
+    playerSnooper.addClientStat("fps", std::to_string(debugFPS));
+    playerSnooper.addClientStat("vsync_enabled", gameSettings->enableVsync ? "true" : "false");
+    playerSnooper.addClientStat("display_frequency", std::to_string(Display::getDisplayMode().frequency));
+    playerSnooper.addClientStat("display_type", fullscreen ? "fullscreen" : "windowed");
+    playerSnooper.addClientStat("run_time", std::to_string((currentTimeMillis() - playerSnooper.getMinecraftStartTimeMillis()) / 60LL * 1000LL));
+    // Java: getCurrentAction(); the idle integrated server always exists, so the menu reports "singleplayer".
+    playerSnooper.addClientStat("current_action", "singleplayer");
+    playerSnooper.addClientStat("endianness", "little");
+    const auto entries = mcResourcePackRepository ? mcResourcePackRepository->getRepositoryEntries() : std::vector<std::shared_ptr<ResourcePackRepository::Entry>> {};
+    playerSnooper.addClientStat("resource_packs", std::to_string(entries.size()));
+    int i = 0;
+    for (const auto& entry : entries)
+        playerSnooper.addClientStat("resource_pack[" + std::to_string(i++) + "]", entry->getResourcePackName());
+    playerSnooper.addClientStat("snooper_partner", integratedServerSnooper->getUniqueID());
+}
+
+void Minecraft::addServerTypeToSnooper(PlayerUsageSnooper& playerSnooper)
+{
+    playerSnooper.addStatToSnooper("opengl_version", GL::glGetString(GL::GL_VERSION));
+    playerSnooper.addStatToSnooper("opengl_vendor", GL::glGetString(GL::GL_VENDOR));
+    playerSnooper.addStatToSnooper("client_brand", "vanilla");
+    playerSnooper.addStatToSnooper("launched_version", launchedVersion);
+    // Java also lists ~150 gl_caps[...] OpenGL extension flags, which have no Direct3D meaning.
+    playerSnooper.addStatToSnooper("gl_max_texture_size", std::to_string(D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION));
 }
 
 } // namespace mc
