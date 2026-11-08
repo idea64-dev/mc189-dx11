@@ -50,4 +50,7 @@ std::optional<std::string> formatArgs(std::string_view pattern, const Args&... a
 // String.length() and charAt() counting UTF-16 code units.
 size_t utf16Length(std::string_view utf8);
 
+// String.trim(): strips characters <= ' ' from both ends (UTF-8 bytes of non-ASCII characters are all above).
+std::string trim(std::string_view text);
+
 } // namespace mc::java

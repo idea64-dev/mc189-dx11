@@ -93,6 +93,38 @@ inline float intBitsToFloat(int32_t bits) { return std::bit_cast<float>(bits); }
 inline int64_t doubleToRawLongBits(double value) { return std::bit_cast<int64_t>(value); }
 inline double longBitsToDouble(int64_t bits) { return std::bit_cast<double>(bits); }
 
+// --- Math.round ---
+
+// Math.round(double) as in Java 8: half up, computed on the bits so 0.49999999999999994 rounds to 0.
+inline int64_t round(double value)
+{
+    const int64_t bits = doubleToRawLongBits(value);
+    const int64_t biasedExp = (bits & 0x7FF0000000000000LL) >> 52;
+    const int64_t shift = (52 + 1023) - biasedExp;
+    if ((shift & -64) == 0) {
+        int64_t r = (bits & 0x000FFFFFFFFFFFFFLL) | 0x0010000000000000LL;
+        if (bits < 0)
+            r = -r;
+        return ((r >> shift) + 1) >> 1;
+    }
+    return d2l(value);
+}
+
+// Math.round(float).
+inline int32_t round(float value)
+{
+    const int32_t bits = floatToRawIntBits(value);
+    const int32_t biasedExp = (bits & 0x7F800000) >> 23;
+    const int32_t shift = (23 + 127) - biasedExp;
+    if ((shift & -32) == 0) {
+        int32_t r = (bits & 0x007FFFFF) | 0x00800000;
+        if (bits < 0)
+            r = -r;
+        return ((r >> shift) + 1) >> 1;
+    }
+    return f2i(value);
+}
+
 // --- String.hashCode() over UTF-16 code units ---
 
 constexpr int32_t hashCode(std::u16string_view text)

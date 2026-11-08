@@ -171,6 +171,17 @@ float parseFloat(std::string_view text)
     return negative ? -value : value;
 }
 
+std::string trim(std::string_view text)
+{
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end && static_cast<unsigned char>(text[begin]) <= ' ')
+        ++begin;
+    while (end > begin && static_cast<unsigned char>(text[end - 1]) <= ' ')
+        --end;
+    return std::string(text.substr(begin, end - begin));
+}
+
 size_t utf16Length(std::string_view utf8)
 {
     size_t units = 0;

@@ -4,6 +4,7 @@
 
 #include "core/JavaString.h"
 
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -52,6 +53,14 @@ private:
 class StatCollector {
 public:
     static std::string translateToLocal(const std::string& key);
+    // String.format over the translation; "Format error: " + it where Java's format throws.
+    static std::string translateToLocalFormatted(const std::string& key, std::span<const std::string> parameters);
+    template <class... Args>
+    static std::string translateToLocalFormatted(const std::string& key, const Args&... parameters)
+    {
+        const std::vector<std::string> converted { java::toString(parameters)... };
+        return translateToLocalFormatted(key, std::span<const std::string>(converted));
+    }
     static bool canTranslate(const std::string& key);
 };
 

@@ -157,6 +157,13 @@ std::string StatCollector::translateToLocal(const std::string& key)
     return it == properties.end() ? key : it->second;
 }
 
+std::string StatCollector::translateToLocalFormatted(const std::string& key, std::span<const std::string> parameters)
+{
+    const std::string s = translateToLocal(key);
+    const auto formatted = java::format(s, parameters);
+    return formatted ? *formatted : "Format error: " + s;
+}
+
 bool StatCollector::canTranslate(const std::string& key)
 {
     return I18n::i18nLocale != nullptr && I18n::i18nLocale->getProperties().contains(key);
