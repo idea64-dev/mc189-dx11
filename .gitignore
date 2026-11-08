@@ -6,3 +6,5 @@
 CMakeUserPresets.json
 /run_vanilla/
 /logs/
+/.claude/
+*.dmp

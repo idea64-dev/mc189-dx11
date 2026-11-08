@@ -10,6 +10,23 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The release preset keeps its PDB (crash stacks, profiling) but optimizes fully: RelWithDebInfo defaults to
+# /Ob1, which inlines only functions marked inline. The unreferenced code and identical functions are folded
+# away again (/DEBUG turns that off).
+foreach(lang C CXX)
+    string(REPLACE "/Ob1" "/Ob3" CMAKE_${lang}_FLAGS_RELWITHDEBINFO "${CMAKE_${lang}_FLAGS_RELWITHDEBINFO}")
+    string(APPEND CMAKE_${lang}_FLAGS_RELWITHDEBINFO " /Oi /Gy /Gw")
+endforeach()
+string(APPEND CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO " /OPT:REF /OPT:ICF")
+# Whole-program optimization: a few percent more, but the code is generated at link time (minutes, a 1 GB
+# engine library). Off by default; -DMC_LTCG=ON for a final build.
+option(MC_LTCG "Link-time code generation for the release preset" OFF)
+if(MC_LTCG)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+    # Prints the progress of the code generation.
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO " /LTCG:STATUS")
+endif()
+
 # --- Third-party (vendored, see third_party/README.md) ---
 
 add_library(miniz STATIC third_party/miniz/miniz.c)
@@ -41,6 +58,8 @@ set(MC_SHADER_OUTPUT "${CMAKE_BINARY_DIR}/generated/shaders")
 set(MC_SHADER_HEADERS "")
 foreach(shader IN ITEMS
         "FixedFunctionVS|vs_5_0|VSMain"
+        "FixedFunctionVSChunk|vs_5_0|VSChunk"
+        "FixedFunctionGSWideLine|gs_5_0|GSWideLine"
         "FixedFunctionPS|ps_5_0|PSMain"
         "FixedFunctionPSFlat|ps_5_0|PSMainFlat"
         "PresentVS|vs_5_0|PresentVS"

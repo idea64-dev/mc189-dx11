@@ -73,7 +73,8 @@ public class WorldDump {
             }
             for (char c : s.getData()) h = h * 31 + c;
             for (byte b : s.getBlocklightArray().getData()) h = h * 31 + (b & 255);
-            for (byte b : s.getSkylightArray().getData()) h = h * 31 + (b & 255);
+            if (s.getSkylightArray() == null) h = h * 31 - 2;
+            else for (byte b : s.getSkylightArray().getData()) h = h * 31 + (b & 255);
             h = h * 31 + (s.isEmpty() ? 1 : 0);
             h = h * 31 + (s.getNeedsRandomTick() ? 1 : 0);
         }

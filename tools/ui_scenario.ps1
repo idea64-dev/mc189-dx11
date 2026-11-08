@@ -15,6 +15,8 @@
 #   drag X1 Y1 X2 Y2   press at 1, move to 2, release
 #   wheel N            mouse wheel, N notches (positive = away from the user)
 #   key CODE           LWJGL key code (DirectInput scan code; codes >= 0x80 are sent E0-extended)
+#   hold CODE MS       hold a key down for MS milliseconds
+#   look DX DY         relative mouse move in raw counts (turns the camera in game)
 #   wait MS            sleep
 #   shot NAME          press F2 and save the screenshot as NAME.png
 #   scale N            GUI scale used for the coordinates from here on (default: auto, like ScaledResolution)
@@ -24,7 +26,11 @@ param(
     [string]$Preset = "debug",
     [string]$Launcher = "$env:APPDATA\.tlauncher\legacy\Minecraft\game",
     [int]$StartupSeconds = 0,
-    [int]$StepDelayMs = 500
+    [int]$StepDelayMs = 500,
+    # options.txt lines to start with (e.g. "enableVsync:false", "maxFps:260"); defaults otherwise
+    [string[]]$Option = @(),
+    # keep the worlds of earlier runs (scenarios that load a world instead of creating one)
+    [switch]$KeepSaves
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -32,6 +38,10 @@ $outDir = Join-Path $root "run\cmp\$Target"
 $gameDir = Join-Path $outDir "game"
 New-Item -ItemType Directory -Force $gameDir | Out-Null
 Remove-Item (Join-Path $gameDir "options.txt") -ErrorAction SilentlyContinue
+if (-not $KeepSaves) { Remove-Item (Join-Path $gameDir "saves") -Recurse -Force -ErrorAction SilentlyContinue }
+# Comma-separated too: an array passed through -File arrives as one string.
+$Option = @($Option | ForEach-Object { $_ -split "," } | Where-Object { $_ })
+if ($Option.Count -gt 0) { Set-Content (Join-Path $gameDir "options.txt") $Option -Encoding ascii }
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type @"
@@ -55,6 +65,15 @@ public static class U {
         var down = new INPUT { type = 1 }; down.u.ki.scan = (ushort)(ext == 1 ? code - 0x80 : code); down.u.ki.flags = 8u | ext;
         var up = down; up.u.ki.flags = 8u | 2u | ext;
         SendInput(2, new[] { down, up }, Marshal.SizeOf(typeof(INPUT)));
+    }
+    public static void KeyState(int code, bool down) {
+        uint ext = code >= 0x80 ? 1u : 0u;
+        var i = new INPUT { type = 1 }; i.u.ki.scan = (ushort)(ext == 1 ? code - 0x80 : code); i.u.ki.flags = 8u | ext | (down ? 0u : 2u);
+        SendInput(1, new[] { i }, Marshal.SizeOf(typeof(INPUT)));
+    }
+    public static void MouseMove(int dx, int dy) {
+        var i = new INPUT { type = 0 }; i.u.mi.dwFlags = 1u; i.u.mi.dx = dx; i.u.mi.dy = dy;
+        SendInput(1, new[] { i }, Marshal.SizeOf(typeof(INPUT)));
     }
     public static void Mouse(uint flags, uint data) {
         var i = new INPUT { type = 0 }; i.u.mi.dwFlags = flags; i.u.mi.mouseData = data;
@@ -146,6 +165,8 @@ try {
             }
             "wheel"  { [U]::Mouse(0x800, [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$a[1] * 120), 0)); Start-Sleep -Milliseconds $StepDelayMs }
             "key"    { [U]::Key([Convert]::ToInt32($a[1], 10)); Start-Sleep -Milliseconds $StepDelayMs }
+            "hold"   { [U]::KeyState([Convert]::ToInt32($a[1], 10), $true); Start-Sleep -Milliseconds ([int]$a[2]); [U]::KeyState([Convert]::ToInt32($a[1], 10), $false); Start-Sleep -Milliseconds $StepDelayMs }
+            "look"   { [U]::MouseMove([int]$a[1], [int]$a[2]); Start-Sleep -Milliseconds $StepDelayMs }
             "wait"   { Start-Sleep -Milliseconds ([int]$a[1]) }
             "shot"   { Save-Shot $hwnd $a[1] }
             "scale"  { $scale = [int]$a[1] }

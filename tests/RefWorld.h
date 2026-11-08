@@ -32,8 +32,11 @@ inline int32_t hash(Chunk& chunk)
             mix(c);
         for (const uint8_t b : s->getBlocklightArray()->getData())
             mix(b);
-        for (const uint8_t b : s->getSkylightArray()->getData())
-            mix(b);
+        if (!s->getSkylightArray())
+            mix(-2); // no sky (the Nether, the End)
+        else
+            for (const uint8_t b : s->getSkylightArray()->getData())
+                mix(b);
         mix(s->isEmpty() ? 1 : 0);
         mix(s->getNeedsRandomTick() ? 1 : 0);
     }

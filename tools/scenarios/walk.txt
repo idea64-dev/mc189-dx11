@@ -1,0 +1,33 @@
+# Creates a world (seed 1234), then checks the player controls: F3 screenshots before and after walking
+# forward (W), jumping (Space) and strafing (A), to compare the coordinates, and the block outline while
+# looking down at the ground.
+click 213 118      # main menu: Singleplayer
+click 290 198      # Create New World...
+click 213 197      # More World Options...
+click 213 70       # seed field
+key 2              # 1
+key 3              # 2
+key 4              # 3
+key 5              # 4
+click 213 197      # Done
+click 130 222      # Create New World
+wait 40000
+key 61             # F3: debug screen
+wait 1000
+shot walk_before
+hold 17 2000       # W
+shot walk_forward
+hold 57 300        # Space
+shot walk_jump
+hold 30 2000       # A
+shot walk_strafe
+look 0 250         # look down
+wait 500
+shot look_down
+look 300 0         # turn right
+wait 500
+shot look_right
+key 1              # Esc: pause menu
+wait 500
+click 213 174      # Save and Quit to Title
+wait 8000

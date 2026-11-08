@@ -1,0 +1,23 @@
+# Frame rate benchmark on the world left by an earlier run (-KeepSaves; walk.txt or enter_world.txt create
+# one). Run with -Option "enableVsync:false","maxFps:260" to measure without the limit. F3 screenshots:
+# standing still, while turning (the visibility search runs every frame) and looking at the horizon.
+click 213 118      # main menu: Singleplayer
+click 213 50       # first world
+click 135 198      # Play Selected World
+wait 15000
+key 61             # F3: debug screen
+wait 3000
+shot bench_still
+look 0 -150        # look up to the horizon
+wait 3000
+shot bench_horizon
+look 800 0
+wait 300
+look 800 0
+wait 300
+look 800 0
+shot bench_turning
+key 1              # Esc: pause menu
+wait 500
+click 213 174      # Save and Quit to Title
+wait 6000

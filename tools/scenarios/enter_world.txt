@@ -1,0 +1,25 @@
+# Creates the world "New World" (seed 1234), waits for the spawn area and the chunks, takes screenshots in the
+# world (looking around), opens the pause menu, then saves and quits to the title. Run on both targets and
+# compare with tools/compare_screens.py.
+click 213 118      # main menu: Singleplayer
+click 290 198      # Create New World...
+click 213 197      # More World Options...
+click 213 70       # seed field
+key 2              # 1
+key 3              # 2
+key 4              # 3
+key 5              # 4
+click 213 197      # Done
+click 130 222      # Create New World
+wait 80000
+shot world_spawn
+key 61             # F3: debug screen
+wait 1000
+shot world_debug
+key 61
+key 1              # Esc: pause menu
+wait 1000
+shot world_pause
+click 213 174      # Save and Quit to Title
+wait 10000
+shot after_quit

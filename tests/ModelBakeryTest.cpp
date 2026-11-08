@@ -18,6 +18,7 @@
 #include "client/resources/model/IBakedModel.h"
 #include "client/resources/model/ModelManager.h"
 #include "core/Java.h"
+#include "core/JavaString.h"
 #include "core/ZipArchive.h"
 #include "init/Bootstrap.h"
 
