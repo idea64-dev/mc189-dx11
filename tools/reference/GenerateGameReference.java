@@ -26,6 +26,7 @@ import net.minecraft.util.Vec3;
  *   tests/reference/MathReference.inc  BlockPos, EnumFacing, Vec3 and AxisAlignedBB results for random inputs
  *   tests/reference/blocks.txt         the block registry (net/minecraft/block/BlockDump.java)
  *   tests/reference/items.txt          the item registry (net/minecraft/item/ItemDump.java)
+ *   tests/reference/world.txt          chunk storage and the light engine (net/minecraft/world/WorldDump.java)
  *
  * Run by generate_game.ps1. Everything is hex-encoded UTF-8 so any text survives the trip into C++.
  */
@@ -245,6 +246,9 @@ public class GenerateGameReference {
         }
         try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Paths.get(args[0], "items.txt"), StandardCharsets.UTF_8))) {
             net.minecraft.item.ItemDump.dump(out);
+        }
+        try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Paths.get(args[0], "world.txt"), StandardCharsets.UTF_8))) {
+            net.minecraft.world.WorldDump.dump(out);
         }
     }
 }
