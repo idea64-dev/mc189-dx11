@@ -114,6 +114,9 @@ void RenderChunk::rebuildChunk(float x, float y, float z, ChunkCompileTaskGenera
     }
 
     compiledchunk->setVisibility(visgraph.computeVisibility());
+    // Java's region cache is a local of this method; here the task carries it, and the task outlives the
+    // build as the render chunk's compileTask: drop the copy of the blocks now.
+    generator.setRegionCache(nullptr);
 }
 
 void RenderChunk::finishCompileTask()

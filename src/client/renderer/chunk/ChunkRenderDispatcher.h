@@ -165,8 +165,10 @@ private:
 
     std::thread::id clientThread;
     BlockingQueue<std::shared_ptr<ChunkCompileTaskGenerator>> queueChunkUpdates { 100 };
-    BlockingQueue<RegionRenderCacheBuilder*> queueFreeRenderBuilders { 5 };
+    BlockingQueue<RegionRenderCacheBuilder*> queueFreeRenderBuilders { 16 };
     std::vector<std::unique_ptr<RegionRenderCacheBuilder>> renderBuilders;
+    // Java: five; three more than the batcher threads.
+    size_t builderCount;
     std::mutex uploadsMutex;
     std::deque<std::function<void()>> queueChunkUploads;
     std::vector<std::unique_ptr<ChunkRenderWorker>> listThreadedWorkers;

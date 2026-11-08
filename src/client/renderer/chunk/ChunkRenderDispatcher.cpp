@@ -10,6 +10,7 @@
 #include "entity/Entity.h"
 #include "platform/Sys.h"
 
+#include <algorithm>
 #include <atomic>
 #include <format>
 
@@ -32,16 +33,28 @@ const char* statusName(ChunkCompileTaskGenerator::Status status)
 
 // --- ChunkRenderDispatcher ---
 
+namespace {
+
+// Java: two batcher threads and five builders. More threads only build the same chunks sooner; the builders
+// stay three more than the threads, as there.
+int batcherThreads()
+{
+    return std::clamp(static_cast<int>(std::thread::hardware_concurrency()) - 1, 2, 8);
+}
+
+} // namespace
+
 ChunkRenderDispatcher::ChunkRenderDispatcher()
     : clientThread(std::this_thread::get_id())
+    , builderCount(static_cast<size_t>(batcherThreads() + 3))
 {
-    for (int j = 0; j < 5; ++j) {
+    for (size_t j = 0; j < builderCount; ++j) {
         renderBuilders.push_back(std::make_unique<RegionRenderCacheBuilder>());
         queueFreeRenderBuilders.add(renderBuilders.back().get());
     }
     renderWorker = std::make_unique<ChunkRenderWorker>(*this, std::make_unique<RegionRenderCacheBuilder>());
 
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < batcherThreads(); ++i) {
         listThreadedWorkers.push_back(std::make_unique<ChunkRenderWorker>(*this));
         ChunkRenderWorker* worker = listThreadedWorkers.back().get();
         threads.emplace_back([worker] { worker->run(); });
@@ -103,8 +116,11 @@ bool ChunkRenderDispatcher::updateChunkLater(RenderChunk* chunkRenderer)
             queueChunkUpdates.remove(task);
     });
     const bool flag = queueChunkUpdates.offer(generator);
-    if (!flag)
+    if (!flag) {
         generator->finish();
+        // Never built: its copy of the blocks is not needed (it stays the render chunk's compileTask).
+        generator->setRegionCache(nullptr);
+    }
     return flag;
 }
 
@@ -123,7 +139,7 @@ void ChunkRenderDispatcher::stopChunkUpdates()
     }
 
     std::vector<RegionRenderCacheBuilder*> list;
-    while (list.size() != 5) {
+    while (list.size() != builderCount) {
         // A worker still finishing a task frees its builder only after its uploads ran on this thread, so keep
         // running them while waiting (Java blocks in take() and can hang here).
         if (std::optional<RegionRenderCacheBuilder*> builder = queueFreeRenderBuilders.take(std::chrono::milliseconds(1)); builder && *builder)
