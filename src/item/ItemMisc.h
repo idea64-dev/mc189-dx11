@@ -6,18 +6,27 @@
 // ItemEmptyMap, ItemEnderPearl, ItemEnderEye, ItemGlassBottle, ItemFireball, ItemLead, ItemNameTag,
 // ItemArmorStand, ItemMonsterPlacer, ItemSkull, ItemFirework, ItemFireworkCharge, ItemEnchantedBook, ItemDye,
 // ItemCoal, ItemRecord, ItemSimpleFoiled, ItemExpBottle, ItemEditableBook and ItemWritableBook.
-// What they do in the world -- placing, throwing, spawning, filling, shooting, map updates, bonemeal, book
-// editing, tooltips -- comes with the player, world ticks, entities, screens and game systems (stages 8 to 12). Constructor arguments
-// those need are kept.
+// Their world callbacks are ported; the entities they would spawn (arrows, throwables, minecarts, boats, paintings,
+// armor stands, mobs, fishing hooks, fireworks) come with stage 10 and are marked where they are created -- the
+// checks, sounds, stack changes and Random draws around them are kept. Not ported yet: maps (ItemMap,
+// ItemEmptyMap, stage 12), book screens and contents (ItemWritableBook, ItemEditableBook, stages 11 and 12),
+// the mob items of saddles, name tags and dyes on sheep (stage 10), and tooltips (stage 11).
 
 #include "item/Item.h"
+#include "util/WeightedRandomChestContent.h"
 
 #include <memory>
 
 namespace mc {
 
+struct BlockPos;
+class EntityPlayer;
+class Enchantment;
 class NBTBase;
 class NBTTagList;
+class World;
+struct EnchantmentData;
+enum class EnumFacing;
 
 class ItemBow : public Item {
 public:
@@ -30,6 +39,8 @@ public:
     int getMaxItemUseDuration(const ItemStack&) const override { return 72000; }
     EnumAction getItemUseAction(const ItemStack&) const override { return EnumAction::BOW; }
     int getItemEnchantability() const override { return 1; }
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
+    void onPlayerStoppedUsing(ItemStack& stack, World* worldIn, EntityPlayer* playerIn, int timeLeft) override;
 };
 
 class ItemFishingRod : public Item {
@@ -41,6 +52,7 @@ public:
     bool isFull3D() const override { return true; }
     bool shouldRotateAroundWhenRendering() const override { return true; }
     int getItemEnchantability() const override { return 1; }
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemFlintAndSteel : public Item {
@@ -48,6 +60,9 @@ public:
     MC_ITEM_CLASS(ItemFlintAndSteel)
 
     ItemFlintAndSteel();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemCarrotOnAStick : public Item {
@@ -70,8 +85,11 @@ public:
     {
     }
 
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+
 private:
-    [[maybe_unused]] Block* block;
+    Block* block;
 };
 
 class ItemDoor : public Item {
@@ -80,8 +98,14 @@ public:
 
     explicit ItemDoor(Block* blockIn);
 
+    // Places both halves with flags 2 and notifies the neighbours; the hinge follows the neighbouring doors
+    // and solid blocks.
+    static void placeDoor(World* worldIn, const BlockPos& pos, EnumFacing facing, Block* door);
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+
 private:
-    [[maybe_unused]] Block* block;
+    Block* block;
 };
 
 class ItemMinecart : public Item {
@@ -93,6 +117,9 @@ public:
 
     explicit ItemMinecart(EnumMinecartType type);
 
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+
     const EnumMinecartType minecartType;
 };
 
@@ -102,8 +129,14 @@ public:
 
     explicit ItemBucket(Block* containedBlock);
 
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
+    // Pours the contained liquid at pos; false when the bucket is empty or the place is taken.
+    bool tryPlaceContainedLiquid(World* worldIn, const BlockPos& pos);
+
 private:
-    [[maybe_unused]] Block* isFull;
+    std::shared_ptr<ItemStack> fillBucket(const std::shared_ptr<ItemStack>& emptyBuckets, EntityPlayer* player, Item* fullBucket);
+
+    Block* isFull;
 };
 
 class ItemBucketMilk : public Item {
@@ -114,6 +147,8 @@ public:
 
     int getMaxItemUseDuration(const ItemStack&) const override { return 32; }
     EnumAction getItemUseAction(const ItemStack&) const override { return EnumAction::DRINK; }
+    std::shared_ptr<ItemStack> onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn) override;
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemHangingEntity : public Item {
@@ -125,8 +160,11 @@ public:
 
     explicit ItemHangingEntity(HangingType type);
 
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+
 private:
-    [[maybe_unused]] HangingType hangingEntityClass;
+    [[maybe_unused]] HangingType hangingEntityClass; // the entity to create (stage 10)
 };
 
 class ItemSign : public Item {
@@ -134,6 +172,9 @@ public:
     MC_ITEM_CLASS(ItemSign)
 
     ItemSign();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemBed : public Item {
@@ -141,6 +182,9 @@ public:
     MC_ITEM_CLASS(ItemBed)
 
     ItemBed();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemSaddle : public Item {
@@ -155,6 +199,9 @@ public:
     MC_ITEM_CLASS(ItemRedstone)
 
     ItemRedstone();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemSnowball : public Item {
@@ -162,6 +209,8 @@ public:
     MC_ITEM_CLASS(ItemSnowball)
 
     ItemSnowball();
+
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemBoat : public Item {
@@ -169,6 +218,8 @@ public:
     MC_ITEM_CLASS(ItemBoat)
 
     ItemBoat();
+
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemBook : public Item {
@@ -184,6 +235,8 @@ public:
     MC_ITEM_CLASS(ItemEgg)
 
     ItemEgg();
+
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemMapBase : public Item {
@@ -212,6 +265,8 @@ public:
     MC_ITEM_CLASS(ItemEnderPearl)
 
     ItemEnderPearl();
+
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemEnderEye : public Item {
@@ -219,6 +274,10 @@ public:
     MC_ITEM_CLASS(ItemEnderEye)
 
     ItemEnderEye();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemGlassBottle : public Item {
@@ -226,6 +285,8 @@ public:
     MC_ITEM_CLASS(ItemGlassBottle)
 
     ItemGlassBottle();
+
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemFireball : public Item {
@@ -233,6 +294,9 @@ public:
     MC_ITEM_CLASS(ItemFireball)
 
     ItemFireball();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemLead : public Item {
@@ -240,6 +304,9 @@ public:
     MC_ITEM_CLASS(ItemLead)
 
     ItemLead();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemNameTag : public Item {
@@ -254,6 +321,9 @@ public:
     MC_ITEM_CLASS(ItemArmorStand)
 
     ItemArmorStand();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemMonsterPlacer : public Item {
@@ -261,6 +331,10 @@ public:
     MC_ITEM_CLASS(ItemMonsterPlacer)
 
     ItemMonsterPlacer();
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 
     std::string getItemStackDisplayName(const ItemStack& stack) const override;
     int getColorFromItemStack(const ItemStack& stack, int renderPass) const override;
@@ -282,11 +356,16 @@ public:
     std::string getItemStackDisplayName(const ItemStack& stack) const override;
     // Turns a SkullOwner name into a profile compound.
     bool updateItemStackNBT(NBTTagCompound& nbt) const override;
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemFirework : public Item {
 public:
     MC_ITEM_CLASS(ItemFirework)
+
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemFireworkCharge : public Item {
@@ -307,7 +386,15 @@ public:
     EnumRarity getRarity(const ItemStack& stack) const override;
     // The StoredEnchantments list, a new empty list when absent.
     std::shared_ptr<NBTTagList> getEnchantments(const ItemStack& stack) const;
-    // Java: addEnchantment, getEnchantedItemStack, getAll and getRandom -- with enchantments (stage 12).
+    // Java: getRandom -- a random enchanted book (EnchantmentHelper.addRandomEnchantment at level 30) as a loot
+    // entry.
+    WeightedRandomChestContent getRandom(Random& rand) const;
+    WeightedRandomChestContent getRandom(Random& rand, int minChance, int maxChance, int weight) const;
+    // Stores the enchantment, raising the level of one already stored.
+    void addEnchantment(ItemStack& stack, const EnchantmentData& enchantment) const;
+    ItemStack getEnchantedItemStack(const EnchantmentData& data) const;
+    // A book for every level of the enchantment.
+    void getAll(const Enchantment* enchantment, std::vector<ItemStack>& list) const;
 };
 
 class ItemDye : public Item {
@@ -322,6 +409,12 @@ public:
     std::string getUnlocalizedName(const ItemStack& stack) const override;
     using Item::getUnlocalizedName;
     void getSubItems(Item* item, const CreativeTabs* tab, std::vector<ItemStack>& subItems) const override;
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+    // Grows the IGrowable block at target (server side); true if it could grow.
+    static bool applyBonemeal(ItemStack& stack, World* worldIn, const BlockPos& target);
+    // The client effect 2005: green sparkles over the block (draws from itemRand).
+    static void spawnBonemealParticles(World* worldIn, const BlockPos& pos, int amount);
 };
 
 class ItemCoal : public Item {
@@ -343,6 +436,8 @@ public:
 
     std::string getRecordNameLocal() const;
     EnumRarity getRarity(const ItemStack&) const override { return EnumRarity::RARE; }
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
     // By "records.<name>"; null when unknown.
     static ItemRecord* getRecord(const std::string& name);
 
@@ -363,6 +458,7 @@ public:
     ItemExpBottle();
 
     bool hasEffect(const ItemStack&) const override { return true; }
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemWritableBook : public Item {

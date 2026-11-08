@@ -22,7 +22,17 @@ public:
     bool isOpaqueCube() const override { return false; }
     int getRenderType() const override { return 3; }
     bool isFullCube() const override { return false; }
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
+    void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity) override;
     void setBlockBoundsForItemRender() override { setBlockBounds(0.0f, 0.0f, 0.0f, 1.0f, 0.125f, 1.0f); }
+    // Java: onBlockActivated opens the brewing GUI -- stage 8.
+    void onBlockPlacedBy(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityLivingBase* placer, const ItemStack& stack) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    Item* getItem(World*, const BlockPos&) override { return Items::brewing_stand; }
+    int getComparatorInputOverride(World* worldIn, const BlockPos& pos) override;
+
     bool hasComparatorInputOverride() const override { return true; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override

@@ -22,9 +22,15 @@ public:
     {
     }
 
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override;
+    void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity) override;
     void setBlockBoundsForItemRender() override { setBlockBounds(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f); }
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    bool canPaneConnectToBlock(const Block* blockIn) const;
     bool canSilkHarvest() const override { return true; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT_MIPPED; }
     int getMetaFromState(const IBlockState*) const override { return 0; }
@@ -63,6 +69,8 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(COLOR, dyeColorByMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return getMetadata(state->getValue(COLOR)); }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 16); }
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
 
 protected:
     void construct() override

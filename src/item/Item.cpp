@@ -3,11 +3,14 @@
 #include "block/Block.h"
 #include "client/resources/Locale.h"
 #include "core/JavaString.h"
+#include "entity/player/EntityPlayer.h"
 #include "init/Blocks.h"
 #include "init/Items.h"
 #include "item/ItemBlock.h"
 #include "item/ItemStack.h"
+#include "util/MathHelper.h"
 #include "util/Random.h"
+#include "world/World.h"
 
 #include <stdexcept>
 #include <unordered_map>
@@ -189,6 +192,55 @@ void Item::getSubItems(Item* item, const CreativeTabs*, std::vector<ItemStack>& 
 bool Item::getIsRepairable(const ItemStack&, const ItemStack&) const
 {
     return false;
+}
+
+bool Item::onItemUse(ItemStack&, EntityPlayer*, World*, const BlockPos&, EnumFacing, float, float, float)
+{
+    return false;
+}
+
+std::shared_ptr<ItemStack> Item::onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World*, EntityPlayer*)
+{
+    return itemStackIn;
+}
+
+std::shared_ptr<ItemStack> Item::onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World*, EntityPlayer*)
+{
+    return stack;
+}
+
+bool Item::hitEntity(ItemStack&, EntityLivingBase*, EntityLivingBase*)
+{
+    return false;
+}
+
+bool Item::onBlockDestroyed(ItemStack&, World*, Block*, const BlockPos&, EntityLivingBase*)
+{
+    return false;
+}
+
+bool Item::itemInteractionForEntity(ItemStack&, EntityPlayer*, EntityLivingBase*)
+{
+    return false;
+}
+
+std::optional<MovingObjectPosition> Item::getMovingObjectPositionFromPlayer(World* worldIn, EntityPlayer* playerIn, bool useLiquids) const
+{
+    const float f = playerIn->rotationPitch;
+    const float f1 = playerIn->rotationYaw;
+    const double d0 = playerIn->posX;
+    const double d1 = playerIn->posY + static_cast<double>(playerIn->getEyeHeight());
+    const double d2 = playerIn->posZ;
+    const Vec3 vec3(d0, d1, d2);
+    const float f2 = MathHelper::cos(-f1 * 0.017453292f - 3.1415927f);
+    const float f3 = MathHelper::sin(-f1 * 0.017453292f - 3.1415927f);
+    const float f4 = -MathHelper::cos(-f * 0.017453292f);
+    const float f5 = MathHelper::sin(-f * 0.017453292f);
+    const float f6 = f3 * f4;
+    const float f7 = f2 * f4;
+    const double d3 = 5.0;
+    const Vec3 vec31 = vec3.addVector(static_cast<double>(f6) * d3, static_cast<double>(f5) * d3, static_cast<double>(f7) * d3);
+    return worldIn->rayTraceBlocks(vec3, vec31, useLiquids, !useLiquids, false);
 }
 
 } // namespace mc

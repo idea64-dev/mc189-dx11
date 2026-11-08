@@ -2,8 +2,11 @@
 
 #include "block/AllBlocks.h"
 #include "creativetab/CreativeTabs.h"
+#include "entity/EntityItemHooks.h"
+#include "entity/player/EntityPlayer.h"
 #include "init/Blocks.h"
 #include "item/ItemStack.h"
+#include "world/World.h"
 
 namespace mc {
 
@@ -178,6 +181,89 @@ float ItemShears::getStrVsBlock(const ItemStack& stack, const Block* block) cons
     if (block == Blocks::web || &block->getMaterial() == &Material::leaves)
         return 15.0f;
     return block == Blocks::wool ? 5.0f : Item::getStrVsBlock(stack, block);
+}
+
+bool ItemTool::hitEntity(ItemStack& stack, EntityLivingBase*, EntityLivingBase* attacker)
+{
+    damageItem(stack, 2, attacker);
+    return true;
+}
+
+bool ItemTool::onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn)
+{
+    if (static_cast<double>(blockIn->getBlockHardness(worldIn, pos)) != 0.0)
+        damageItem(stack, 1, playerIn);
+    return true;
+}
+
+bool ItemSword::hitEntity(ItemStack& stack, EntityLivingBase*, EntityLivingBase* attacker)
+{
+    damageItem(stack, 1, attacker);
+    return true;
+}
+
+bool ItemSword::onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn)
+{
+    if (static_cast<double>(blockIn->getBlockHardness(worldIn, pos)) != 0.0)
+        damageItem(stack, 2, playerIn);
+    return true;
+}
+
+std::shared_ptr<ItemStack> ItemSword::onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World*, EntityPlayer* playerIn)
+{
+    playerIn->setItemInUse(itemStackIn, getMaxItemUseDuration(*itemStackIn));
+    return itemStackIn;
+}
+
+bool ItemHoe::onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float, float, float)
+{
+    if (!playerIn->canPlayerEdit(pos.offset(side), side, &stack))
+        return false;
+
+    const IBlockState* iblockstate = worldIn->getBlockState(pos);
+    Block* block = iblockstate->getBlock();
+
+    if (side != EnumFacing::DOWN && &worldIn->getBlockState(pos.up())->getBlock()->getMaterial() == &Material::air) {
+        if (block == Blocks::grass)
+            return useHoe(stack, playerIn, worldIn, pos, Blocks::farmland->getDefaultState());
+
+        if (block == Blocks::dirt) {
+            switch (iblockstate->getValue(BlockDirt::VARIANT)) {
+            case BlockDirt::DirtType::DIRT:
+                return useHoe(stack, playerIn, worldIn, pos, Blocks::farmland->getDefaultState());
+            case BlockDirt::DirtType::COARSE_DIRT:
+                return useHoe(stack, playerIn, worldIn, pos, Blocks::dirt->getDefaultState()->withProperty(BlockDirt::VARIANT, BlockDirt::DirtType::DIRT));
+            default:
+                break;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool ItemHoe::useHoe(ItemStack& stack, EntityPlayer* player, World* worldIn, const BlockPos& target, const IBlockState* newState)
+{
+    const Block::SoundType& sound = *newState->getBlock()->stepSound;
+    worldIn->playSoundEffect(static_cast<double>(static_cast<float>(target.getX()) + 0.5f), static_cast<double>(static_cast<float>(target.getY()) + 0.5f),
+        static_cast<double>(static_cast<float>(target.getZ()) + 0.5f), sound.getStepSound(), (sound.getVolume() + 1.0f) / 2.0f, sound.getFrequency() * 0.8f);
+
+    if (worldIn->isRemote)
+        return true;
+
+    worldIn->setBlockState(target, newState);
+    damageItem(stack, 1, player);
+    return true;
+}
+
+bool ItemShears::onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn)
+{
+    if (&blockIn->getMaterial() != &Material::leaves && blockIn != Blocks::web && blockIn != Blocks::tallgrass && blockIn != Blocks::vine
+        && blockIn != Blocks::tripwire && blockIn != Blocks::wool)
+        return Item::onBlockDestroyed(stack, worldIn, blockIn, pos, playerIn);
+
+    damageItem(stack, 1, playerIn);
+    return true;
 }
 
 } // namespace mc

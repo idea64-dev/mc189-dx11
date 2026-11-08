@@ -27,6 +27,18 @@ struct JavaHash<std::string> {
     int32_t operator()(const std::string& key) const { return java::hashCode(key); }
 };
 
+// Integer.hashCode
+template <>
+struct JavaHash<int32_t> {
+    int32_t operator()(int32_t key) const { return key; }
+};
+
+// Long.hashCode: (int)(value ^ value >>> 32)
+template <>
+struct JavaHash<int64_t> {
+    int32_t operator()(int64_t key) const { return static_cast<int32_t>(key ^ java::ushr(key, 32)); }
+};
+
 template <class K, class V, class Hash = JavaHash<K>>
 class JavaHashMap {
 public:

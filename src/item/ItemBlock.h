@@ -2,8 +2,7 @@
 
 // Original: net/minecraft/item/ItemBlock.java and its subclasses ItemMultiTexture, ItemColored, ItemCloth,
 // ItemSlab, ItemLeaves, ItemPiston, ItemSnow, ItemLilyPad, ItemAnvilBlock, ItemDoublePlant and ItemBanner.
-// Not ported yet: onItemUse / canPlaceBlockOnSide / setTileEntityNBT / tryPlace (block placement, stage 8)
-// and ItemBanner.addInformation (tooltips, stage 11).
+// Not ported yet: ItemBanner.addInformation (tooltips, stage 11).
 
 #include "item/Item.h"
 
@@ -29,6 +28,13 @@ public:
     const CreativeTabs* getCreativeTab() const override;
     void getSubItems(Item* item, const CreativeTabs* tab, std::vector<ItemStack>& subItems) const override;
     Block* getBlock() const { return block; }
+    // Places the block against the clicked side (or into a replaceable block).
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+    // Copies the stack's BlockEntityTag into the placed tile entity; true if that changed it.
+    static bool setTileEntityNBT(World* worldIn, EntityPlayer* player, const BlockPos& pos, ItemStack& stack);
+    // Java: canPlaceBlockOnSide -- the client's check before it sends a placement.
+    virtual bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side, EntityPlayer* player, ItemStack* stack);
 
 protected:
     Block* const block;
@@ -124,10 +130,19 @@ public:
     int getMetadata(int damage) const override { return damage; }
     std::string getUnlocalizedName(const ItemStack& stack) const override;
     using ItemBlock::getUnlocalizedName;
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+    bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side, EntityPlayer* player, ItemStack* stack) override;
 
 private:
+    // Java: singleSlab.getVariant(stack) -- here the raw value of the variant property for the stack's metadata.
+    int getVariant(const ItemStack& stack) const;
+    bool tryPlace(ItemStack& stack, World* worldIn, const BlockPos& pos, int variantInStack);
+    // Turns the slab at pos into the double slab of that variant.
+    bool placeDouble(ItemStack& stack, World* worldIn, const BlockPos& pos, int variant);
+
     BlockSlab* const singleSlab;
-    [[maybe_unused]] BlockSlab* const doubleSlab; // placement (stage 8)
+    BlockSlab* const doubleSlab;
 };
 
 class ItemLeaves : public ItemBlock {
@@ -169,6 +184,9 @@ public:
     }
 
     int getMetadata(int damage) const override { return damage; }
+    // Adds a layer to the snow there, else places snow.
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 };
 
 class ItemLilyPad : public ItemColored {
@@ -181,6 +199,8 @@ public:
     }
 
     int getColorFromItemStack(const ItemStack& stack, int renderPass) const override;
+    // Places the lily pad on the still water looked at.
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemAnvilBlock : public ItemMultiTexture {
@@ -213,6 +233,8 @@ public:
 
     ItemBanner();
 
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
     std::string getItemStackDisplayName(const ItemStack& stack) const override;
     int getColorFromItemStack(const ItemStack& stack, int renderPass) const override;
     void getSubItems(Item* item, const CreativeTabs* tab, std::vector<ItemStack>& subItems) const override;

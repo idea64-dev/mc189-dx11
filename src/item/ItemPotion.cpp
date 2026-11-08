@@ -3,10 +3,12 @@
 #include "client/resources/Locale.h"
 #include "core/JavaString.h"
 #include "creativetab/CreativeTabs.h"
+#include "entity/player/EntityPlayer.h"
 #include "init/Items.h"
 #include "item/ItemStack.h"
 #include "nbt/NBTTagCompound.h"
 #include "potion/PotionHelper.h"
+#include "world/World.h"
 
 namespace mc {
 
@@ -113,6 +115,40 @@ void ItemPotion::getSubItems(Item* item, const CreativeTabs* tab, std::vector<It
     }
     for (const auto& entry : subItemsCache)
         subItems.emplace_back(item, 1, entry.second);
+}
+
+std::shared_ptr<ItemStack> ItemPotion::onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn)
+{
+    if (!playerIn->capabilities.isCreativeMode)
+        --stack->stackSize;
+
+    if (!worldIn->isRemote) {
+        for (const PotionEffect& potioneffect : getEffects(*stack))
+            playerIn->addPotionEffect(PotionEffect::copyOf(potioneffect));
+    }
+
+    // Java: triggerAchievement(StatList.objectUseStats[...]) -- stage 12.
+    if (!playerIn->capabilities.isCreativeMode) {
+        if (stack->stackSize <= 0)
+            return std::make_shared<ItemStack>(Items::glass_bottle);
+        playerIn->inventory.addItemStackToInventory(std::make_shared<ItemStack>(Items::glass_bottle));
+    }
+
+    return stack;
+}
+
+std::shared_ptr<ItemStack> ItemPotion::onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn)
+{
+    if (isSplash(itemStackIn->getMetadata())) {
+        if (!playerIn->capabilities.isCreativeMode)
+            --itemStackIn->stackSize;
+        worldIn->playSoundAtEntity(playerIn, "random.bow", 0.5f, 0.4f / (itemRand().nextFloat() * 0.4f + 0.8f));
+        // Java: spawns an EntityPotion (server side) -- the thrown entities, stage 10.
+        return itemStackIn;
+    }
+
+    playerIn->setItemInUse(itemStackIn, getMaxItemUseDuration(*itemStackIn));
+    return itemStackIn;
 }
 
 } // namespace mc

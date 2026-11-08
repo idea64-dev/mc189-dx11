@@ -56,6 +56,8 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return info(state->getValue(VARIANT)).meta; }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(smallBlock); }
+    Item* getItem(World*, const BlockPos&) override { return Item::getItemFromBlock(smallBlock); }
+    const IBlockState* onBlockPlaced(World*, const BlockPos&, EnumFacing, float, float, float, int, EntityLivingBase*) override { return getDefaultState(); }
 
 protected:
     void construct() override
@@ -66,7 +68,7 @@ protected:
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &VARIANT }); }
 
 private:
-    [[maybe_unused]] Block* smallBlock;
+    Block* smallBlock;
 };
 
 MC_ENUM_TRAITS(BlockHugeMushroom::EnumType, 13, BlockHugeMushroom::info(value).name)

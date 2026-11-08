@@ -73,6 +73,9 @@ public:
     {
     }
 
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+
     int damageDropped(const IBlockState* state) const override
     {
         const EnumType type = state->getValue(VARIANT);

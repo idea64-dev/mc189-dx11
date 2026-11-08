@@ -1,9 +1,12 @@
 #include "world/chunk/storage/AnvilChunkLoader.h"
 
+#include "block/Block.h"
 #include "core/DataStream.h"
 #include "core/Log.h"
 #include "nbt/CompressedStreamTools.h"
 #include "nbt/NBTTagCompound.h"
+#include "tileentity/TileEntity.h"
+#include "world/NextTickListEntry.h"
 #include "world/World.h"
 #include "world/WorldProvider.h"
 #include "world/chunk/Chunk.h"
@@ -184,7 +187,7 @@ std::shared_ptr<NBTTagCompound> AnvilChunkLoader::writeChunkToNBT(Chunk& chunkIn
     level->setTag("Sections", nbttaglist);
     level->setByteArray("Biomes", std::vector<uint8_t>(chunkIn.getBiomeArray().begin(), chunkIn.getBiomeArray().end()));
 
-    // Entities, tile entities and scheduled ticks: written back as they were read (see Chunk.h).
+    // Entities: written back as they were read (see Chunk.h).
     chunkIn.setHasEntities(false);
     auto entities = std::make_shared<NBTTagList>();
     for (const auto& entity : chunkIn.getPendingEntityNBT()) {
@@ -193,10 +196,32 @@ std::shared_ptr<NBTTagCompound> AnvilChunkLoader::writeChunkToNBT(Chunk& chunkIn
     }
     level->setTag("Entities", entities);
     auto tileEntities = std::make_shared<NBTTagList>();
-    for (const auto& tileEntity : chunkIn.getPendingTileEntityNBT())
-        tileEntities->appendTag(tileEntity->copy());
+    for (const auto& entry : chunkIn.getTileEntityMap()) {
+        auto nbttagcompound3 = std::make_shared<NBTTagCompound>();
+        entry.second->writeToNBT(*nbttagcompound3);
+        tileEntities->appendTag(nbttagcompound3);
+    }
     level->setTag("TileEntities", tileEntities);
-    if (!chunkIn.getPendingTileTickNBT().empty()) {
+    if (worldIn.hasScheduledTicks()) {
+        const std::vector<NextTickListEntry> list = worldIn.getPendingBlockUpdates(&chunkIn, false);
+        if (!list.empty()) {
+            const int64_t j1 = worldIn.getTotalWorldTime();
+            auto ticks = std::make_shared<NBTTagList>();
+            for (const NextTickListEntry& nextticklistentry : list) {
+                auto nbttagcompound2 = std::make_shared<NBTTagCompound>();
+                const auto resourcelocation = Block::blockRegistry.getNameForObject(nextticklistentry.getBlock());
+                nbttagcompound2->setString("i", resourcelocation ? resourcelocation->toString() : "");
+                nbttagcompound2->setInteger("x", nextticklistentry.position.getX());
+                nbttagcompound2->setInteger("y", nextticklistentry.position.getY());
+                nbttagcompound2->setInteger("z", nextticklistentry.position.getZ());
+                nbttagcompound2->setInteger("t", static_cast<int>(nextticklistentry.scheduledTime - j1));
+                nbttagcompound2->setInteger("p", nextticklistentry.priority);
+                ticks->appendTag(nbttagcompound2);
+            }
+            level->setTag("TileTicks", ticks);
+        }
+    } else if (!chunkIn.getPendingTileTickNBT().empty()) {
+        // A world without scheduled ticks (the reference tests) writes them back as loaded.
         auto ticks = std::make_shared<NBTTagList>();
         for (const auto& tick : chunkIn.getPendingTileTickNBT())
             ticks->appendTag(tick->copy());
@@ -258,14 +283,21 @@ std::unique_ptr<Chunk> AnvilChunkLoader::readChunkFromNBT(World* worldIn, const 
     }
     const auto tileEntities = level.getTagList("TileEntities", 10);
     for (int l2 = 0; l2 < tileEntities->tagCount(); ++l2) {
-        // Java: TileEntity.createAndLoadEntity -- stage 9.
-        chunk->getPendingTileEntityNBT().push_back(tileEntities->getCompoundTagAt(l2));
+        if (auto tileentity = TileEntity::createAndLoadEntity(*tileEntities->getCompoundTagAt(l2)))
+            chunk->addTileEntity(tileentity);
     }
     if (level.hasKey("TileTicks", 9)) {
         const auto ticks = level.getTagList("TileTicks", 10);
         for (int i3 = 0; i3 < ticks->tagCount(); ++i3) {
-            // Java: worldIn.scheduleBlockUpdate -- stage 9.
-            chunk->getPendingTileTickNBT().push_back(ticks->getCompoundTagAt(i3));
+            const auto nbttagcompound4 = ticks->getCompoundTagAt(i3);
+            if (!worldIn->hasScheduledTicks()) {
+                chunk->getPendingTileTickNBT().push_back(nbttagcompound4);
+                continue;
+            }
+            Block* block = nbttagcompound4->hasKey("i", 8) ? Block::getBlockFromName(nbttagcompound4->getString("i"))
+                                                            : Block::getBlockById(nbttagcompound4->getInteger("i"));
+            worldIn->scheduleBlockUpdate(BlockPos(nbttagcompound4->getInteger("x"), nbttagcompound4->getInteger("y"), nbttagcompound4->getInteger("z")), block,
+                nbttagcompound4->getInteger("t"), nbttagcompound4->getInteger("p"));
         }
     }
     return chunk;

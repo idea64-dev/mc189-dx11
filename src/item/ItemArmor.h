@@ -1,8 +1,7 @@
 #pragma once
 
 // Original: net/minecraft/item/ItemArmor.java (with ItemArmor.ArmorMaterial).
-// Not ported yet: onItemRightClick (equipping, stage 8) and the dispenser behavior the constructor registers
-// (BlockDispenser.dispenseBehaviorRegistry, with the dispenser tile entity in stage 9).
+// Not ported yet: the dispenser behavior the constructor registers (BlockDispenser.dispenseBehaviorRegistry).
 
 #include "item/Item.h"
 
@@ -58,6 +57,8 @@ public:
     // Throws std::logic_error for materials other than leather (Java: UnsupportedOperationException).
     void setColor(ItemStack& stack, int color) const;
     bool getIsRepairable(const ItemStack& toRepair, const ItemStack& repair) const override;
+    // Puts the armor on when that slot is empty.
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
 
     const int armorType;
     const int damageReduceAmount;

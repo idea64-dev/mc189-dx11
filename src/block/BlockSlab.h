@@ -21,6 +21,13 @@ public:
     }
 
     bool canSilkHarvest() const override { return false; }
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override;
+    int getDamageValue(World* worldIn, const BlockPos& pos) override;
     void setBlockBoundsForItemRender() override
     {
         if (isDouble())
@@ -48,6 +55,8 @@ protected:
             setBlockBounds(0.0f, 0.0f, 0.0f, 1.0f, 0.5f, 1.0f);
         setLightOpacity(255);
     }
+
+    static bool isSlab(const Block* blockIn);
 };
 
 MC_ENUM_TRAITS(BlockSlab::EnumBlockHalf, 2, value == BlockSlab::EnumBlockHalf::TOP ? "top" : "bottom")
@@ -115,6 +124,7 @@ public:
             addSubBlocks(item, list, { 0, 1, 3, 4, 5, 6, 7 }); // all but WOOD
     }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::stone_slab); }
+    Item* getItem(World*, const BlockPos&) override { return Item::getItemFromBlock(Blocks::stone_slab); }
 
 protected:
     void construct() override
@@ -189,6 +199,7 @@ public:
             addSubBlocks(item, list, { 0 });
     }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::stone_slab2); }
+    Item* getItem(World*, const BlockPos&) override { return Item::getItemFromBlock(Blocks::stone_slab2); }
 
 protected:
     void construct() override
@@ -257,6 +268,7 @@ public:
             addSubBlocks(item, list, 0, 6);
     }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::wooden_slab); }
+    Item* getItem(World*, const BlockPos&) override { return Item::getItemFromBlock(Blocks::wooden_slab); }
 
 protected:
     void construct() override

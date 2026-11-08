@@ -17,9 +17,31 @@ public:
     {
     }
 
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    int tickRate(World*) override { return wooden ? 30 : 20; }
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    // Java: protected static; the lever shares it.
+    static bool func_181088_a(World* worldIn, const BlockPos& pos, EnumFacing side);
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    int getWeakPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing) override { return state->getValue(POWERED) ? 15 : 0; }
+    int getStrongPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing side) override
+    {
+        return !state->getValue(POWERED) ? 0 : (state->getValue(FACING) == side ? 15 : 0);
+    }
     bool canProvidePower() const override { return true; }
+    void randomTick(World*, const BlockPos&, const IBlockState*, Random&) override { }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    using Block::onEntityCollidedWithBlock;
+    void onEntityCollidedWithBlock(World* worldIn, const BlockPos& pos, const IBlockState* state, Entity* entityIn) override;
     void setBlockBoundsForItemRender() override
     {
         const float f = 0.1875f;
@@ -67,6 +89,12 @@ protected:
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING, &POWERED }); }
 
     const bool wooden;
+
+private:
+    bool checkForDrop(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    void updateBlockBounds(const IBlockState* state);
+    void checkForArrows(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    void notifyNeighbors(World* worldIn, const BlockPos& pos, EnumFacing facing);
 };
 
 class BlockButtonStone : public BlockButton {

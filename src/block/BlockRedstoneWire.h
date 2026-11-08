@@ -1,8 +1,12 @@
 #pragma once
 
-// Original: net/minecraft/block/BlockRedstoneWire.java (power propagation comes with the world, stage 9)
+// Original: net/minecraft/block/BlockRedstoneWire.java
 
 #include "block/BlockBasics.h"
+#include "core/JavaHashMap.h"
+#include "world/chunk/Chunk.h"
+
+#include <optional>
 
 namespace mc {
 
@@ -22,9 +26,20 @@ public:
     {
     }
 
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    int getStrongPower(IBlockAccess* worldIn, const BlockPos& pos, const IBlockState* state, EnumFacing side) override;
+    int getWeakPower(IBlockAccess* worldIn, const BlockPos& pos, const IBlockState* state, EnumFacing side) override;
     bool canProvidePower() const override { return canProvidePowerFlag; }
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    Item* getItem(World*, const BlockPos&) override { return Items::redstone; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(POWER, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(POWER); }
@@ -39,9 +54,24 @@ protected:
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &NORTH, &EAST, &SOUTH, &WEST, &POWER }); }
 
+    static bool canConnectUpwardsTo(IBlockAccess* worldIn, const BlockPos& pos);
+    static bool canConnectUpwardsTo(const IBlockState* state);
+    // Java passes a null side for the upward check.
+    static bool canConnectTo(const IBlockState* blockState, std::optional<EnumFacing> side);
+
 private:
+    EnumAttachPosition getAttachPosition(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing direction);
+    const IBlockState* updateSurroundingRedstone(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    const IBlockState* calculateCurrentChanges(World* worldIn, const BlockPos& pos1, const BlockPos& pos2, const IBlockState* state);
+    void notifyWireNeighborsOfStateChange(World* worldIn, const BlockPos& pos);
+    int getMaxCurrentStrength(World* worldIn, const BlockPos& pos, int strength);
+    bool func_176339_d(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side);
+    static int colorMultiplier(int powerLevel);
+
     // Java: canProvidePower, cleared while the wire computes its own power.
     bool canProvidePowerFlag = true;
+    // Java: a HashSet<BlockPos>; its iteration order decides the order of the neighbour updates.
+    JavaHashMap<BlockPos, bool> blocksNeedingUpdate;
 };
 
 MC_ENUM_TRAITS(BlockRedstoneWire::EnumAttachPosition, 3,

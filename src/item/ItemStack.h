@@ -5,9 +5,11 @@
 // object (copy() makes the deep copy Java's copy() does); holders that need null or sharing use
 // std::shared_ptr<ItemStack> / nullptr. The tag compound is shared like Java's reference: getTagCompound()
 // hands out the stack's own compound.
-// Not ported yet: the world, player and entity calls (onItemUse, useItemRightClick, damageItem, hitEntity,
-// onBlockDestroyed, interactWithEntity, updateAnimation, onCrafting, onPlayerStoppedUsing), getTooltip,
-// attribute modifiers, attemptDamageItem (needs enchantments), item frames and getChatComponent.
+// Stacks held through a shared pointer can return themselves from useItemRightClick / onItemUseFinish
+// (enable_shared_from_this), so callers compare the result with the stack they passed as Java does.
+// damageItem, attemptDamageItem and the attribute modifiers are in entity/EntityItemHooks.h.
+// Not ported yet: getTooltip, item frames and getChatComponent. The use statistics (StatList.objectUseStats)
+// come with stage 12.
 
 #include "item/Item.h"
 
@@ -16,11 +18,17 @@
 
 namespace mc {
 
+class Entity;
+class EntityLivingBase;
+class EntityPlayer;
+class World;
+struct BlockPos;
+enum class EnumFacing;
 class NBTTagCompound;
 class NBTTagList;
 class NBTBase;
 
-class ItemStack {
+class ItemStack : public std::enable_shared_from_this<ItemStack> {
 public:
     explicit ItemStack(const Block* block, int amount = 1, int meta = 0);
     explicit ItemStack(Item* item, int amount = 1, int meta = 0);
@@ -81,6 +89,21 @@ public:
     void setItem(Item* newItem) { item = newItem; }
     bool canDestroy(const Block* block);
     bool canPlaceOn(const Block* block);
+
+    // Java: copyItemStack -- null for null.
+    static std::shared_ptr<ItemStack> copyItemStack(const ItemStack* stack);
+    bool onItemUse(EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY, float hitZ);
+    // The stack must be held by a shared pointer (the result may be this stack).
+    std::shared_ptr<ItemStack> useItemRightClick(World* worldIn, EntityPlayer* playerIn);
+    static std::shared_ptr<ItemStack> useItemRightClick(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn);
+    std::shared_ptr<ItemStack> onItemUseFinish(World* worldIn, EntityPlayer* playerIn);
+    static std::shared_ptr<ItemStack> onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn);
+    void hitEntity(EntityLivingBase* entityIn, EntityPlayer* playerIn);
+    void onBlockDestroyed(World* worldIn, Block* blockIn, const BlockPos& pos, EntityPlayer* playerIn);
+    bool interactWithEntity(EntityPlayer* playerIn, EntityLivingBase* entityIn);
+    void updateAnimation(World* worldIn, Entity* entityIn, int inventorySlot, bool isCurrentItem);
+    void onCrafting(World* worldIn, EntityPlayer* playerIn, int amount);
+    void onPlayerStoppedUsing(World* worldIn, EntityPlayer* playerIn, int timeLeft);
 
     int stackSize = 0;
     int animationsToGo = 0;

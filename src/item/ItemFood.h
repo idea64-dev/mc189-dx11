@@ -2,8 +2,6 @@
 
 // Original: net/minecraft/item/ItemFood.java, ItemAppleGold.java, ItemFishFood.java, ItemSoup.java,
 // ItemSeedFood.java and ItemSeeds.java.
-// Not ported yet: eating and planting (onItemRightClick, onItemUseFinish, onFoodEaten, onItemUse) -- they need the
-// player and its food stats (stages 8 and 12).
 
 #include "item/Item.h"
 
@@ -21,6 +19,8 @@ public:
 
     int getMaxItemUseDuration(const ItemStack&) const override { return 32; }
     EnumAction getItemUseAction(const ItemStack&) const override { return EnumAction::EAT; }
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
+    std::shared_ptr<ItemStack> onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn) override;
     virtual int getHealAmount(const ItemStack&) const { return healAmount; }
     virtual float getSaturationModifier(const ItemStack&) const { return saturationModifier; }
     bool isWolfsFavoriteMeat() const { return wolfsFavoriteMeat; }
@@ -48,6 +48,9 @@ public:
 
     const int itemUseDuration = 32;
 
+protected:
+    virtual void onFoodEaten(ItemStack& stack, World* worldIn, EntityPlayer* player);
+
 private:
     const int healAmount;
     const float saturationModifier;
@@ -72,6 +75,9 @@ public:
     bool hasEffect(const ItemStack& stack) const override;
     EnumRarity getRarity(const ItemStack& stack) const override;
     void getSubItems(Item* item, const CreativeTabs* tab, std::vector<ItemStack>& subItems) const override;
+
+protected:
+    void onFoodEaten(ItemStack& stack, World* worldIn, EntityPlayer* player) override;
 };
 
 class ItemFishFood : public ItemFood {
@@ -112,6 +118,9 @@ public:
     std::string getUnlocalizedName(const ItemStack& stack) const override;
     using ItemFood::getUnlocalizedName;
 
+protected:
+    void onFoodEaten(ItemStack& stack, World* worldIn, EntityPlayer* player) override;
+
 private:
     const bool cooked;
 };
@@ -125,6 +134,9 @@ public:
     {
         setMaxStackSize(1);
     }
+
+    // Gives the bowl back.
+    std::shared_ptr<ItemStack> onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn) override;
 };
 
 class ItemSeedFood : public ItemFood {
@@ -138,10 +150,12 @@ public:
     {
     }
 
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+
 private:
-    // Planting (stage 8).
-    [[maybe_unused]] Block* crops;
-    [[maybe_unused]] Block* soilId;
+    Block* crops;
+    Block* soilId;
 };
 
 class ItemSeeds : public Item {
@@ -150,10 +164,12 @@ public:
 
     ItemSeeds(Block* cropsIn, Block* soil);
 
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
+
 private:
-    // Planting (stage 8).
-    [[maybe_unused]] Block* crops;
-    [[maybe_unused]] Block* soilBlockID;
+    Block* crops;
+    Block* soilBlockID;
 };
 
 } // namespace mc

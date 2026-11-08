@@ -1,6 +1,7 @@
 #include "item/ItemArmor.h"
 
 #include "creativetab/CreativeTabs.h"
+#include "entity/player/EntityPlayer.h"
 #include "init/Items.h"
 #include "item/ItemStack.h"
 #include "nbt/NBTTagCompound.h"
@@ -111,6 +112,18 @@ void ItemArmor::setColor(ItemStack& stack, int color) const
 bool ItemArmor::getIsRepairable(const ItemStack& toRepair, const ItemStack& repair) const
 {
     return material.getRepairItem() == repair.getItem() ? true : Item::getIsRepairable(toRepair, repair);
+}
+
+std::shared_ptr<ItemStack> ItemArmor::onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World*, EntityPlayer* playerIn)
+{
+    // Java: EntityLiving.getArmorPosition(stack) - 1; for armor 4 - armorType.
+    const int i = 4 - armorType - 1;
+    const std::shared_ptr<ItemStack> itemstack = playerIn->getCurrentArmor(i);
+    if (!itemstack) {
+        playerIn->setCurrentItemOrArmor(i, std::make_shared<ItemStack>(itemStackIn->copy()));
+        itemStackIn->stackSize = 0;
+    }
+    return itemStackIn;
 }
 
 } // namespace mc

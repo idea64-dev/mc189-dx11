@@ -1,6 +1,7 @@
 #include "item/ItemStack.h"
 
 #include "block/Block.h"
+#include "entity/player/EntityPlayer.h"
 #include "nbt/NBTTagCompound.h"
 
 namespace mc {
@@ -246,6 +247,72 @@ bool ItemStack::canPlaceOn(const Block* block)
     }
     canPlaceOnCacheResult = false;
     return false;
+}
+
+std::shared_ptr<ItemStack> ItemStack::copyItemStack(const ItemStack* stack)
+{
+    return stack ? std::make_shared<ItemStack>(stack->copy()) : nullptr;
+}
+
+bool ItemStack::onItemUse(EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY, float hitZ)
+{
+    // Java: a success adds to StatList.objectUseStats -- the statistics, stage 12.
+    return getItem()->onItemUse(*this, playerIn, worldIn, pos, side, hitX, hitY, hitZ);
+}
+
+std::shared_ptr<ItemStack> ItemStack::useItemRightClick(World* worldIn, EntityPlayer* playerIn)
+{
+    return useItemRightClick(shared_from_this(), worldIn, playerIn);
+}
+
+std::shared_ptr<ItemStack> ItemStack::useItemRightClick(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn)
+{
+    return stack->getItem()->onItemRightClick(stack, worldIn, playerIn);
+}
+
+std::shared_ptr<ItemStack> ItemStack::onItemUseFinish(World* worldIn, EntityPlayer* playerIn)
+{
+    return onItemUseFinish(shared_from_this(), worldIn, playerIn);
+}
+
+std::shared_ptr<ItemStack> ItemStack::onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn)
+{
+    return stack->getItem()->onItemUseFinish(stack, worldIn, playerIn);
+}
+
+void ItemStack::hitEntity(EntityLivingBase* entityIn, EntityPlayer* playerIn)
+{
+    // Java: a hit adds to StatList.objectUseStats -- stage 12.
+    item->hitEntity(*this, entityIn, playerIn);
+}
+
+void ItemStack::onBlockDestroyed(World* worldIn, Block* blockIn, const BlockPos& pos, EntityPlayer* playerIn)
+{
+    // Java: a success adds to StatList.objectUseStats -- stage 12.
+    item->onBlockDestroyed(*this, worldIn, blockIn, pos, playerIn);
+}
+
+bool ItemStack::interactWithEntity(EntityPlayer* playerIn, EntityLivingBase* entityIn)
+{
+    return item->itemInteractionForEntity(*this, playerIn, entityIn);
+}
+
+void ItemStack::updateAnimation(World* worldIn, Entity* entityIn, int inventorySlot, bool isCurrentItem)
+{
+    if (animationsToGo > 0)
+        --animationsToGo;
+    item->onUpdate(*this, worldIn, entityIn, inventorySlot, isCurrentItem);
+}
+
+void ItemStack::onCrafting(World* worldIn, EntityPlayer* playerIn, int)
+{
+    // Java: addStat(StatList.objectCraftStats[...], amount) -- stage 12.
+    item->onCreated(*this, worldIn, playerIn);
+}
+
+void ItemStack::onPlayerStoppedUsing(World* worldIn, EntityPlayer* playerIn, int timeLeft)
+{
+    getItem()->onPlayerStoppedUsing(*this, worldIn, playerIn, timeLeft);
 }
 
 } // namespace mc

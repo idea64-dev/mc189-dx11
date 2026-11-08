@@ -1,8 +1,7 @@
 #pragma once
 
 // Original: net/minecraft/item/ItemPotion.java
-// Not ported yet: drinking and throwing (onItemRightClick, onItemUseFinish) and the effect tooltips
-// (addInformation) -- stages 12 and 11.
+// Not ported yet: the splash potion entity (stage 10) and the effect tooltips (addInformation, stage 11).
 
 #include "item/Item.h"
 #include "potion/Potion.h"
@@ -22,6 +21,8 @@ public:
     const std::vector<PotionEffect>& getEffects(int meta) const;
     int getMaxItemUseDuration(const ItemStack&) const override { return 32; }
     EnumAction getItemUseAction(const ItemStack&) const override { return EnumAction::DRINK; }
+    std::shared_ptr<ItemStack> onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn) override;
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
     static bool isSplash(int meta) { return (meta & 16384) != 0; }
     int getColorFromDamage(int meta) const;
     int getColorFromItemStack(const ItemStack& stack, int renderPass) const override;

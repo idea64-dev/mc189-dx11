@@ -3,17 +3,19 @@
 // Original: net/minecraft/world/chunk/Chunk.java, EmptyChunk.java and ChunkPrimer.java
 // Ported so far: block storage, height maps, sky and block light (with the world's light engine), biome ids,
 // population flags and the network fill (fillChunk).
-// Tile entities and entities exist from stages 9 and 10; until then a chunk keeps their NBT as it was loaded so
-// that saving writes it back unchanged (getPendingTileEntityNBT / getPendingEntityNBT). The block callbacks of
-// setBlockState (breakBlock, onBlockAdded, tile entity creation) come with them as well.
+// Entities exist from stage 10 and scheduled ticks with WorldServer; until then a chunk keeps their NBT as it
+// was loaded so that saving writes it back unchanged (getPendingEntityNBT / getPendingTileTickNBT).
 
+#include "core/JavaHashMap.h"
 #include "util/BlockPos.h"
+#include "util/Vec3.h"
 #include "util/Random.h"
 #include "world/ChunkCoordIntPair.h"
 #include "world/EnumSkyBlock.h"
 #include "world/chunk/storage/ExtendedBlockStorage.h"
 
 #include <array>
+#include <functional>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -21,11 +23,20 @@
 
 namespace mc {
 
+class BiomeGenBase;
 class Block;
+class Entity;
 class IBlockState;
 class IChunkProvider;
 class NBTTagCompound;
+class TileEntity;
 class World;
+class WorldChunkManager;
+
+template <>
+struct JavaHash<BlockPos> {
+    int32_t operator()(const BlockPos& pos) const { return pos.hashCode(); }
+};
 
 class ChunkPrimer {
 public:
@@ -42,6 +53,9 @@ private:
 
 class Chunk {
 public:
+    enum class EnumCreateEntityType { IMMEDIATE, QUEUED, CHECK };
+    using TileEntityMap = JavaHashMap<BlockPos, std::shared_ptr<TileEntity>>;
+
     Chunk(World* worldIn, int x, int z);
     Chunk(World* worldIn, const ChunkPrimer& primer, int x, int z);
     virtual ~Chunk();
@@ -66,10 +80,19 @@ public:
     virtual int getLightFor(EnumSkyBlock type, const BlockPos& pos) const;
     virtual void setLightFor(EnumSkyBlock type, const BlockPos& pos, int value);
     virtual int getLightSubtracted(const BlockPos& pos, int amount) const;
-    // Java: addEntity, removeEntity, removeEntityAtIndex, getEntitiesWithinAABBForEntity,
-    // getEntitiesOfTypeWithinAAAB -- entities, stage 10.
+    virtual void addEntity(const std::shared_ptr<Entity>& entityIn);
+    virtual void removeEntity(Entity* entityIn);
+    virtual void removeEntityAtIndex(Entity* entityIn, int index);
+    virtual void getEntitiesWithinAABBForEntity(const Entity* entityIn, const AxisAlignedBB& aabb, std::vector<Entity*>& listToFill,
+        const std::function<bool(Entity*)>& predicate);
+    // Java: ClassInheritanceMultiMap[16], here plain lists in insertion order (the class index only speeds up
+    // getEntitiesOfTypeWithinAAAB).
+    std::array<std::vector<std::shared_ptr<Entity>>, 16>& getEntityLists() { return entityLists; }
     virtual bool canSeeSky(const BlockPos& pos) const;
-    // Java: getTileEntity, addTileEntity, removeTileEntity -- tile entities, stage 9.
+    virtual std::shared_ptr<TileEntity> getTileEntity(const BlockPos& pos, EnumCreateEntityType type);
+    virtual void addTileEntity(const std::shared_ptr<TileEntity>& tileEntityIn);
+    virtual void addTileEntity(const BlockPos& pos, const std::shared_ptr<TileEntity>& tileEntityIn);
+    virtual void removeTileEntity(const BlockPos& pos);
     virtual void onChunkLoad();
     virtual void onChunkUnload();
     virtual void setChunkModified() { isModified = true; }
@@ -86,8 +109,9 @@ public:
     void setStorageArrays(std::array<std::unique_ptr<ExtendedBlockStorage>, 16> newStorageArrays);
     // Java: fillChunk(byte[], int, boolean) -- a chunk sent by the server (S21PacketChunkData).
     void fillChunk(std::span<const uint8_t> data, int mask, bool fullChunk);
-    // Java: getBiome(pos, WorldChunkManager) asks the biome source for unset entries -- stage 6. Here the raw id,
-    // 255 for unset.
+    // Unset entries (255) are filled from the biome source.
+    BiomeGenBase* getBiome(const BlockPos& pos, WorldChunkManager* chunkManager);
+    // The raw id, 255 for unset.
     int getBiomeId(const BlockPos& pos) const { return blockBiomeArray[static_cast<size_t>((pos.getZ() & 15) << 4 | (pos.getX() & 15))]; }
     std::array<uint8_t, 256>& getBiomeArray() { return blockBiomeArray; }
     void setBiomeArray(std::span<const uint8_t> biomeArray);
@@ -111,9 +135,9 @@ public:
     int64_t getInhabitedTime() const { return inhabitedTime; }
     void setInhabitedTime(int64_t value) { inhabitedTime = value; }
 
-    // The Entities, TileEntities and TileTicks lists as loaded, kept until those systems are ported.
+    TileEntityMap& getTileEntityMap() { return chunkTileEntityMap; }
+    // The Entities and TileTicks lists as loaded, kept until those systems are ported.
     std::vector<std::shared_ptr<NBTTagCompound>>& getPendingEntityNBT() { return pendingEntities; }
-    std::vector<std::shared_ptr<NBTTagCompound>>& getPendingTileEntityNBT() { return pendingTileEntities; }
     std::vector<std::shared_ptr<NBTTagCompound>>& getPendingTileTickNBT() { return pendingTileTicks; }
 
     const int xPosition;
@@ -149,8 +173,12 @@ private:
     int heightMapMinimum = 0;
     int64_t inhabitedTime = 0;
     int queuedLightChecks = 4096;
+    std::shared_ptr<TileEntity> createNewTileEntity(const BlockPos& pos);
+
+    TileEntityMap chunkTileEntityMap;
+    std::vector<BlockPos> tileEntityPosQueue;
+    std::array<std::vector<std::shared_ptr<Entity>>, 16> entityLists;
     std::vector<std::shared_ptr<NBTTagCompound>> pendingEntities;
-    std::vector<std::shared_ptr<NBTTagCompound>> pendingTileEntities;
     std::vector<std::shared_ptr<NBTTagCompound>> pendingTileTicks;
 };
 
@@ -170,7 +198,17 @@ public:
     int getLightFor(EnumSkyBlock type, const BlockPos&) const override { return defaultLightValue(type); }
     void setLightFor(EnumSkyBlock, const BlockPos&, int) override { }
     int getLightSubtracted(const BlockPos&, int) const override { return 0; }
+    // Java: entities and tile entities are dropped silently (the client hands this chunk out for chunks it
+    // has not received yet, the player spawns into one).
+    void addEntity(const std::shared_ptr<Entity>&) override { }
+    void removeEntity(Entity*) override { }
+    void removeEntityAtIndex(Entity*, int) override { }
+    void getEntitiesWithinAABBForEntity(const Entity*, const AxisAlignedBB&, std::vector<Entity*>&, const std::function<bool(Entity*)>&) override { }
     bool canSeeSky(const BlockPos&) const override { return false; }
+    std::shared_ptr<TileEntity> getTileEntity(const BlockPos&, EnumCreateEntityType) override { return nullptr; }
+    void addTileEntity(const std::shared_ptr<TileEntity>&) override { }
+    void addTileEntity(const BlockPos&, const std::shared_ptr<TileEntity>&) override { }
+    void removeTileEntity(const BlockPos&) override { }
     void onChunkLoad() override { }
     void onChunkUnload() override { }
     void setChunkModified() override { }

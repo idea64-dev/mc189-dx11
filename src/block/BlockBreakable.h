@@ -19,7 +19,7 @@ public:
     }
 
     bool isOpaqueCube() const override { return false; }
-    // Java: shouldSideBeRendered uses ignoreSimilarity (stage 7).
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override;
 
 protected:
     bool ignoreSimilarity;

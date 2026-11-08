@@ -25,6 +25,8 @@ inline constexpr std::array<EnumFacing, 6> kFacings { EnumFacing::DOWN, EnumFaci
     EnumFacing::WEST, EnumFacing::EAST };
 // Java: HORIZONTALS, indexed by getHorizontalIndex (south, west, north, east).
 inline constexpr std::array<EnumFacing, 4> kHorizontals { EnumFacing::SOUTH, EnumFacing::WEST, EnumFacing::NORTH, EnumFacing::EAST };
+// Java: iterating EnumFacing.Plane.HORIZONTAL (its facings(): north, east, south, west).
+inline constexpr std::array<EnumFacing, 4> kPlaneHorizontal { EnumFacing::NORTH, EnumFacing::EAST, EnumFacing::SOUTH, EnumFacing::WEST };
 inline constexpr std::array<Axis, 3> kAxes { Axis::X, Axis::Y, Axis::Z };
 
 constexpr int ordinal(EnumFacing facing) { return static_cast<int>(facing); }

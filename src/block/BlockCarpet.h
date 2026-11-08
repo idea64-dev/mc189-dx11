@@ -22,6 +22,10 @@ public:
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
     void setBlockBoundsForItemRender() override { setBlockBoundsFromMeta(0); }
+    void setBlockBoundsBasedOnState(IBlockAccess*, const BlockPos&) override { setBlockBoundsFromMeta(0); }
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override;
     int damageDropped(const IBlockState* state) const override { return getMetadata(state->getValue(COLOR)); }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(COLOR, dyeColorByMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return getMetadata(state->getValue(COLOR)); }
@@ -45,6 +49,10 @@ protected:
         const float f = static_cast<float>(1 * (1 + i)) / 16.0f;
         setBlockBounds(0.0f, 0.0f, 0.0f, 1.0f, f, 1.0f);
     }
+
+private:
+    bool checkForDrop(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    bool canBlockStay(World* worldIn, const BlockPos& pos);
 };
 
 inline const PropertyEnum<EnumDyeColor> BlockCarpet::COLOR("color");

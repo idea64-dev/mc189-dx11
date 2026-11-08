@@ -18,6 +18,12 @@ public:
     {
     }
 
+    void setBlockBoundsBasedOnState(IBlockAccess*, const BlockPos&) override { setBlockBounds(0.0f, 0.0f, 0.0f, 1.0f, 0.375f, 1.0f); }
+    int getWeakPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing) override { return state->getValue(POWER); }
+    void updatePower(World* worldIn, const BlockPos& pos);
+    // Java: onBlockActivated swaps to the other detector when playerIn.isAllowEdit() -- the player comes with stage 8.
+    Item* getItem(World*, const BlockPos&) override { return Item::getItemFromBlock(Blocks::daylight_detector); }
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
     bool isFullCube() const override { return false; }
     bool isOpaqueCube() const override { return false; }
     int getRenderType() const override { return 3; }

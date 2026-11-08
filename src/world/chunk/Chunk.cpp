@@ -3,11 +3,17 @@
 #include "block/Block.h"
 #include "core/Java.h"
 #include "core/Log.h"
+#include "entity/Entity.h"
+#include "util/MathHelper.h"
 #include "init/Blocks.h"
+#include "tileentity/TileEntity.h"
+#include "world/biome/BiomeGenBase.h"
+#include "world/biome/WorldChunkManager.h"
 #include "world/World.h"
 #include "world/WorldProvider.h"
 #include "world/chunk/IChunkProvider.h"
 
+#include <algorithm>
 #include <climits>
 #include <stdexcept>
 
@@ -320,7 +326,12 @@ const IBlockState* Chunk::setBlockState(const BlockPos& pos, const IBlockState* 
     }
     ExtendedBlockStorage* storage = slot.get();
     storage->set(i, j & 15, k, state);
-    // Java: block1.breakBlock (server) or the tile entity removal (client) when the block changes -- stage 9.
+    if (block1 != block) {
+        if (!worldObj->isRemote)
+            const_cast<Block*>(block1)->breakBlock(worldObj, pos, iblockstate);
+        else if (block1->hasTileEntity())
+            worldObj->removeTileEntity(pos);
+    }
     if (storage->getBlockByExtId(i, j & 15, k) != block)
         return nullptr;
     if (flag) {
@@ -337,7 +348,21 @@ const IBlockState* Chunk::setBlockState(const BlockPos& pos, const IBlockState* 
         if (j1 != k1 && (j1 < k1 || getLightFor(EnumSkyBlock::SKY, pos) > 0 || getLightFor(EnumSkyBlock::BLOCK, pos) > 0))
             propagateSkylightOcclusion(i, k);
     }
-    // Java: tile entity updates and block.onBlockAdded (server) -- stage 9.
+    if (block1->hasTileEntity()) {
+        if (const auto tileentity = getTileEntity(pos, EnumCreateEntityType::CHECK))
+            tileentity->updateContainingBlockInfo();
+    }
+    if (!worldObj->isRemote && block1 != block)
+        const_cast<Block*>(block)->onBlockAdded(worldObj, pos, state);
+    if (block->hasTileEntity()) {
+        auto tileentity1 = getTileEntity(pos, EnumCreateEntityType::CHECK);
+        if (!tileentity1) {
+            tileentity1 = const_cast<Block*>(block)->createNewTileEntity(worldObj, block->getMetaFromState(state));
+            worldObj->setTileEntity(pos, tileentity1);
+        }
+        if (tileentity1)
+            tileentity1->updateContainingBlockInfo();
+    }
     isModified = true;
     return iblockstate;
 }
@@ -399,13 +424,151 @@ bool Chunk::canSeeSky(const BlockPos& pos) const
 void Chunk::onChunkLoad()
 {
     isChunkLoaded = true;
-    // Java: hands its tile entities and entities to the world -- stages 9 and 10.
+    std::vector<std::shared_ptr<TileEntity>> tiles;
+    for (const auto& entry : chunkTileEntityMap)
+        tiles.push_back(entry.second);
+    worldObj->addTileEntities(tiles);
+    for (const auto& list : entityLists) {
+        for (const auto& entity : list)
+            entity->onChunkLoad();
+        worldObj->loadEntities(list);
+    }
 }
 
 void Chunk::onChunkUnload()
 {
     isChunkLoaded = false;
-    // Java: marks its tile entities for removal and unloads its entities -- stages 9 and 10.
+    for (const auto& entry : chunkTileEntityMap)
+        worldObj->markTileEntityForRemoval(entry.second);
+    for (const auto& list : entityLists)
+        worldObj->unloadEntities(list);
+}
+
+void Chunk::addEntity(const std::shared_ptr<Entity>& entityIn)
+{
+    hasEntities = true;
+    const int i = MathHelper::floor_double(entityIn->posX / 16.0);
+    const int j = MathHelper::floor_double(entityIn->posZ / 16.0);
+    if (i != xPosition || j != zPosition) {
+        Log::warn("Wrong location! ({}, {}) should be ({}, {}), {}", i, j, xPosition, zPosition, entityIn->toString());
+        entityIn->setDead();
+    }
+    int k = MathHelper::floor_double(entityIn->posY / 16.0);
+    if (k < 0)
+        k = 0;
+    if (k >= static_cast<int>(entityLists.size()))
+        k = static_cast<int>(entityLists.size()) - 1;
+    entityIn->addedToChunk = true;
+    entityIn->chunkCoordX = xPosition;
+    entityIn->chunkCoordY = k;
+    entityIn->chunkCoordZ = zPosition;
+    entityLists[static_cast<size_t>(k)].push_back(entityIn);
+}
+
+void Chunk::removeEntity(Entity* entityIn)
+{
+    removeEntityAtIndex(entityIn, entityIn->chunkCoordY);
+}
+
+void Chunk::removeEntityAtIndex(Entity* entityIn, int index)
+{
+    if (index < 0)
+        index = 0;
+    if (index >= static_cast<int>(entityLists.size()))
+        index = static_cast<int>(entityLists.size()) - 1;
+    auto& list = entityLists[static_cast<size_t>(index)];
+    const auto it = std::find_if(list.begin(), list.end(), [entityIn](const auto& e) { return e.get() == entityIn; });
+    if (it != list.end())
+        list.erase(it);
+}
+
+void Chunk::getEntitiesWithinAABBForEntity(const Entity* entityIn, const AxisAlignedBB& aabb, std::vector<Entity*>& listToFill,
+    const std::function<bool(Entity*)>& predicate)
+{
+    int i = MathHelper::floor_double((aabb.minY - 2.0) / 16.0);
+    int j = MathHelper::floor_double((aabb.maxY + 2.0) / 16.0);
+    i = MathHelper::clamp_int(i, 0, static_cast<int>(entityLists.size()) - 1);
+    j = MathHelper::clamp_int(j, 0, static_cast<int>(entityLists.size()) - 1);
+    for (int k = i; k <= j; ++k) {
+        for (const auto& entity : entityLists[static_cast<size_t>(k)]) {
+            if (entity.get() != entityIn && entity->getEntityBoundingBox().intersectsWith(aabb) && (!predicate || predicate(entity.get()))) {
+                listToFill.push_back(entity.get());
+                for (Entity* part : entity->getParts()) {
+                    if (part != entityIn && part->getEntityBoundingBox().intersectsWith(aabb) && (!predicate || predicate(part)))
+                        listToFill.push_back(part);
+                }
+            }
+        }
+    }
+}
+
+std::shared_ptr<TileEntity> Chunk::createNewTileEntity(const BlockPos& pos)
+{
+    Block* block = getBlock(pos);
+    return !block->hasTileEntity() ? nullptr : block->createNewTileEntity(worldObj, getBlockMetadata(pos));
+}
+
+std::shared_ptr<TileEntity> Chunk::getTileEntity(const BlockPos& pos, EnumCreateEntityType type)
+{
+    const std::shared_ptr<TileEntity>* found = chunkTileEntityMap.find(pos);
+    std::shared_ptr<TileEntity> tileentity = found ? *found : nullptr;
+    if (!tileentity) {
+        if (type == EnumCreateEntityType::IMMEDIATE) {
+            tileentity = createNewTileEntity(pos);
+            worldObj->setTileEntity(pos, tileentity);
+        } else if (type == EnumCreateEntityType::QUEUED) {
+            tileEntityPosQueue.push_back(pos);
+        }
+    } else if (tileentity->isInvalid()) {
+        chunkTileEntityMap.erase(pos);
+        return nullptr;
+    }
+    return tileentity;
+}
+
+void Chunk::addTileEntity(const std::shared_ptr<TileEntity>& tileEntityIn)
+{
+    addTileEntity(tileEntityIn->getPos(), tileEntityIn);
+    if (isChunkLoaded)
+        worldObj->addTileEntity(tileEntityIn);
+}
+
+void Chunk::addTileEntity(const BlockPos& pos, const std::shared_ptr<TileEntity>& tileEntityIn)
+{
+    tileEntityIn->setWorldObj(worldObj);
+    tileEntityIn->setPos(pos);
+    if (getBlock(pos)->hasTileEntity()) {
+        if (const std::shared_ptr<TileEntity>* old = chunkTileEntityMap.find(pos))
+            (*old)->invalidate();
+        tileEntityIn->validate();
+        chunkTileEntityMap.put(pos, tileEntityIn);
+    }
+}
+
+void Chunk::removeTileEntity(const BlockPos& pos)
+{
+    if (isChunkLoaded) {
+        const std::shared_ptr<TileEntity>* found = chunkTileEntityMap.find(pos);
+        if (found) {
+            const std::shared_ptr<TileEntity> tileentity = *found;
+            chunkTileEntityMap.erase(pos);
+            tileentity->invalidate();
+        }
+    }
+}
+
+BiomeGenBase* Chunk::getBiome(const BlockPos& pos, WorldChunkManager* chunkManager)
+{
+    const int i = pos.getX() & 15;
+    const int j = pos.getZ() & 15;
+    int k = blockBiomeArray[static_cast<size_t>(j << 4 | i)] & 255;
+    if (k == 255) {
+        BiomeGenBase* biomegenbase = chunkManager->getBiomeGenerator(pos, BiomeGenBase::plains);
+        k = biomegenbase->biomeID;
+        blockBiomeArray[static_cast<size_t>(j << 4 | i)] = static_cast<uint8_t>(k & 255);
+    }
+    BiomeGenBase* biomegenbase1 = BiomeGenBase::getBiome(k);
+    return biomegenbase1 ? biomegenbase1 : BiomeGenBase::plains;
 }
 
 bool Chunk::needsSaving(bool saveAll) const
@@ -483,7 +646,16 @@ void Chunk::func_150804_b(bool skipRecheckGaps)
     field_150815_m = true;
     if (!lightPopulated && terrainPopulated)
         func_150809_p();
-    // Java: creates the tile entities queued by getTileEntity(QUEUED) -- stage 9.
+    // Java: a ConcurrentLinkedQueue polled until empty, so positions queued meanwhile are handled too.
+    for (size_t index = 0; index < tileEntityPosQueue.size(); ++index) {
+        const BlockPos blockpos = tileEntityPosQueue[index];
+        if (!getTileEntity(blockpos, EnumCreateEntityType::CHECK) && getBlock(blockpos)->hasTileEntity()) {
+            const auto tileentity = createNewTileEntity(blockpos);
+            worldObj->setTileEntity(blockpos, tileentity);
+            worldObj->markBlockRangeForRenderUpdate(blockpos, blockpos);
+        }
+    }
+    tileEntityPosQueue.clear();
 }
 
 bool Chunk::getAreLevelsEmpty(int startY, int endY) const

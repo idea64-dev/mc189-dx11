@@ -24,6 +24,14 @@ public:
     {
     }
 
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void onBlockDestroyedByExplosion(World* worldIn, const BlockPos& pos, Explosion* explosionIn) override;
+    void onBlockDestroyedByPlayer(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void explode(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityLivingBase* igniter);
+    // Java: onBlockActivated lights the TNT with flint and steel or a fire charge -- the player comes with stage 8.
+    // Java: onEntityCollidedWithBlock lights it when a burning arrow hits -- arrows come with stage 10.
+    bool canDropFromExplosion(Explosion*) override { return false; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(EXPLODE, (meta & 1) > 0); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(EXPLODE) ? 1 : 0; }
 
@@ -65,6 +73,15 @@ public:
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XYZ; }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 1, 3); }
     Item* getItemDropped(const IBlockState*, Random& rand, int) const override;
+    bool canBlockStay(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    bool isReplaceable(World*, const BlockPos&) override { return true; }
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    // Java: harvestBlock drops the grass itself for shears -- the player comes with stage 8.
+    int getDamageValue(World* worldIn, const BlockPos& pos) override;
+    // Java: IGrowable
+    bool canGrow(World*, const BlockPos&, const IBlockState* state, bool) { return state->getValue(TYPE) != EnumType::DEAD_BUSH; }
+    bool canUseBonemeal(World*, Random&, const BlockPos&, const IBlockState*) { return true; }
+    void grow(World* worldIn, Random& rand, const BlockPos& pos, const IBlockState* state);
 
 protected:
     void construct() override
@@ -112,7 +129,20 @@ public:
 
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool isPassable(IBlockAccess* worldIn, const BlockPos& pos) override;
+    AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
     void setBlockBoundsForItemRender() override { setBlockBounds(0.0f, 0.40625f, 0.0f, 1.0f, 0.59375f, 1.0f); }
+    void setBounds(const IBlockState* state);
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    std::optional<MovingObjectPosition> collisionRayTrace(World* worldIn, const BlockPos& pos, const Vec3& start, const Vec3& end) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side) override;
+    static bool isValidSupportBlock(const Block* blockIn);
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override
     {
@@ -151,9 +181,22 @@ public:
     {
     }
 
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::TRANSLUCENT; }
+    Item* getItem(World*, const BlockPos&) override { return Items::string; }
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    // Java: onBlockHarvested disarms the wire (flag 4) when the player holds shears -- the player comes with stage 8.
+    using Block::onEntityCollidedWithBlock;
+    void onEntityCollidedWithBlock(World* worldIn, const BlockPos& pos, const IBlockState* state, Entity* entityIn) override;
+    void randomTick(World*, const BlockPos&, const IBlockState*, Random&) override { }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    static bool isConnectedTo(IBlockAccess* worldIn, const BlockPos& pos, const IBlockState* state, EnumFacing direction);
     const IBlockState* getStateFromMeta(int meta) const override
     {
         return getDefaultState()->withProperty(POWERED, (meta & 1) > 0)->withProperty(SUSPENDED, (meta & 2) > 0)->withProperty(ATTACHED, (meta & 4) > 0)->withProperty(DISARMED, (meta & 8) > 0);
@@ -182,6 +225,10 @@ protected:
         setTickRandomly(true);
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &POWERED, &SUSPENDED, &ATTACHED, &DISARMED, &NORTH, &EAST, &WEST, &SOUTH }); }
+
+private:
+    void notifyHook(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    void updateState(World* worldIn, const BlockPos& pos);
 };
 
 class BlockTripWireHook : public Block {
@@ -196,8 +243,28 @@ public:
     {
     }
 
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    void onBlockPlacedBy(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityLivingBase* placer, const ItemStack& stack) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    // Java: func_176260_a -- re-evaluates the hook, the wire and the opposite hook; p_176260_7_ may be null.
+    void func_176260_a(World* worldIn, const BlockPos& pos, const IBlockState* hookState, bool p_176260_4_, bool p_176260_5_, int p_176260_6_,
+        const IBlockState* p_176260_7_);
+    void randomTick(World*, const BlockPos&, const IBlockState*, Random&) override { }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    int getWeakPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing) override { return state->getValue(POWERED) ? 15 : 0; }
+    int getStrongPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing side) override
+    {
+        return !state->getValue(POWERED) ? 0 : (state->getValue(FACING) == side ? 15 : 0);
+    }
     bool canProvidePower() const override { return true; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT_MIPPED; }
     const IBlockState* getStateFromMeta(int meta) const override
@@ -224,10 +291,17 @@ protected:
         setTickRandomly(true);
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING, &POWERED, &ATTACHED, &SUSPENDED }); }
+
+private:
+    void func_180694_a(World* worldIn, const BlockPos& pos, bool p_180694_3_, bool p_180694_4_, bool p_180694_5_, bool p_180694_6_);
+    void func_176262_b(World* worldIn, const BlockPos& pos, EnumFacing facing);
+    bool checkForDrop(World* worldIn, const BlockPos& pos, const IBlockState* state);
 };
 
 class BlockVine : public Block {
 public:
+    bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side) override;
+    static bool canPlaceOn(const Block* blockIn);
     MC_BLOCK_CLASS(BlockVine)
 
     static const PropertyBool UP, NORTH, EAST, SOUTH, WEST;
@@ -263,6 +337,21 @@ public:
         return i;
     }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    bool isReplaceable(World*, const BlockPos&) override { return true; }
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    // Java: harvestBlock drops the vine itself for shears -- the player comes with stage 8.
+    static const PropertyBool& getPropertyFor(EnumFacing side);
+    static int getNumGrownFaces(const IBlockState* state);
+
+private:
+    bool recheckGrownSides(World* worldIn, const BlockPos& pos, const IBlockState* state);
 
 protected:
     void construct() override
@@ -297,8 +386,14 @@ public:
     }
 
     bool isFullCube() const override { return false; }
+    bool isPassable(IBlockAccess*, const BlockPos&) override { return false; }
     bool isOpaqueCube() const override { return false; }
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    bool canConnectTo(IBlockAccess* worldIn, const BlockPos& pos);
     int damageDropped(const IBlockState* state) const override { return static_cast<int>(state->getValue(VARIANT)); }
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override;
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(VARIANT, byMetadata(meta)); }
     int getMetaFromState(const IBlockState* state) const override { return static_cast<int>(state->getValue(VARIANT)); }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 2); }
@@ -333,6 +428,9 @@ public:
     bool canSilkHarvest() const override { return true; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::string; }
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    using Block::onEntityCollidedWithBlock;
+    void onEntityCollidedWithBlock(World* worldIn, const BlockPos& pos, const IBlockState* state, Entity* entityIn) override;
 
 protected:
     void construct() override
@@ -410,7 +508,11 @@ public:
         , isOn(isOnIn)
     {
     }
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::redstone_lamp); }
+    Item* getItem(World*, const BlockPos&) override { return Item::getItemFromBlock(Blocks::redstone_lamp); }
     ItemStack createStackedBlock(const IBlockState*) const override { return ItemStack(Blocks::redstone_lamp); }
 
 protected:
@@ -435,6 +537,15 @@ public:
     {
     }
 
+    int tickRate(World*) override { return 30; }
+    void onBlockClicked(World* worldIn, const BlockPos& pos, EntityPlayer* playerIn) override;
+    using Block::onEntityCollidedWithBlock;
+    void onEntityCollidedWithBlock(World* worldIn, const BlockPos& pos, Entity* entityIn) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
     int quantityDroppedWithBonus(int fortune, Random& random) const override
     {
         // Java evaluates left to right; C++ leaves the order of + unspecified.
@@ -454,6 +565,9 @@ protected:
     }
 
 private:
+    void activate(World* worldIn, const BlockPos& pos);
+    void spawnParticles(World* worldIn, const BlockPos& pos);
+
     const bool isOn;
 };
 

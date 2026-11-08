@@ -36,8 +36,21 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(AGE, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(AGE); }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void growStem(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
+    Item* getItem(World*, const BlockPos&) override { return getSeedItem(); }
+    // Java: IGrowable
+    bool canGrow(World*, const BlockPos&, const IBlockState* state, bool) { return state->getValue(AGE) != 7; }
+    bool canUseBonemeal(World*, Random&, const BlockPos&, const IBlockState*) { return true; }
+    void grow(World* worldIn, Random&, const BlockPos& pos, const IBlockState* state) { growStem(worldIn, pos, state); }
 
 protected:
+    bool canPlaceBlockOn(const Block* ground) const override { return ground == Blocks::farmland; }
+    Item* getSeedItem() const;
     void construct() override
     {
         BlockBush::construct();

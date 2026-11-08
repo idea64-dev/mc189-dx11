@@ -2,8 +2,6 @@
 
 // Original: net/minecraft/world/storage/SaveHandler.java and net/minecraft/world/chunk/storage/AnvilSaveHandler.java
 // -- a world directory: session.lock, level.dat (with level.dat_old as backup), playerdata/ and data/.
-// Player data (IPlayerFileData: writePlayerData, readPlayerData, getAvailablePlayerDat) comes with the player
-// (stage 8).
 
 #include "world/storage/ISaveHandler.h"
 
@@ -13,7 +11,7 @@
 
 namespace mc {
 
-class SaveHandler : public ISaveHandler {
+class SaveHandler : public ISaveHandler, public IPlayerFileData {
 public:
     // Throws std::runtime_error when the session lock can't be written ("Failed to check session lock, aborting").
     SaveHandler(const std::filesystem::path& savesDirectory, const std::string& directoryName, bool playersDirectoryIn);
@@ -28,6 +26,10 @@ public:
     void flush() override { }
     std::filesystem::path getMapFileFromName(const std::string& mapName) const override { return mapDataDir / (mapName + ".dat"); }
     std::string getWorldDirectoryName() const override { return saveDirectoryName; }
+    IPlayerFileData* getPlayerNBTManager() override { return this; }
+    void writePlayerData(EntityPlayer* player) override;
+    std::shared_ptr<NBTTagCompound> readPlayerData(EntityPlayer* player) override;
+    std::vector<std::string> getAvailablePlayerDat() override;
 
 protected:
     void writeLevel(const std::shared_ptr<NBTTagCompound>& data);

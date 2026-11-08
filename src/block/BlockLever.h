@@ -33,8 +33,24 @@ public:
     {
     }
 
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    static int getMetadataForFacing(EnumFacing facing);
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    int getWeakPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing) override { return state->getValue(POWERED) ? 15 : 0; }
+    int getStrongPower(IBlockAccess*, const BlockPos&, const IBlockState* state, EnumFacing side) override
+    {
+        return !state->getValue(POWERED) ? 0 : (info(state->getValue(FACING)).facing == side ? 15 : 0);
+    }
     bool canProvidePower() const override { return true; }
     const IBlockState* getStateFromMeta(int meta) const override
     {
@@ -57,6 +73,11 @@ protected:
         setCreativeTab(&CreativeTabs::tabRedstone);
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING, &POWERED }); }
+
+    static bool func_181090_a(World* worldIn, const BlockPos& pos, EnumFacing side);
+
+private:
+    bool func_181091_e(World* worldIn, const BlockPos& pos, const IBlockState* state);
 };
 
 MC_ENUM_TRAITS(BlockLever::EnumOrientation, 8, BlockLever::info(value).name)

@@ -1,7 +1,6 @@
 #pragma once
 
 // Original: net/minecraft/world/WorldSettings.java (with WorldSettings.GameType)
-// GameType.configurePlayerCapabilities comes with the player (stage 8).
 
 #include "world/WorldType.h"
 
@@ -55,6 +54,11 @@ constexpr GameType getGameTypeByName(std::string_view name)
     }
     return GameType::SURVIVAL;
 }
+
+class PlayerCapabilities;
+
+// Java: GameType.configurePlayerCapabilities
+void configurePlayerCapabilities(GameType type, PlayerCapabilities& capabilities);
 
 class WorldSettings {
 public:

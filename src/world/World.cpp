@@ -1,7 +1,14 @@
 #include "world/World.h"
 
-#include "block/Block.h"
+#include "entity/player/EntityPlayer.h"
+#include "world/NextTickListEntry.h"
+
+#include "block/AllBlocks.h"
 #include "init/Blocks.h"
+#include "tileentity/TileEntity.h"
+#include "world/WorldType.h"
+#include "world/biome/BiomeGenBase.h"
+#include "world/biome/WorldChunkManager.h"
 #include "util/MathHelper.h"
 #include "world/IWorldAccess.h"
 #include "world/WorldProvider.h"
@@ -28,8 +35,7 @@ World::World(std::shared_ptr<ISaveHandler> saveHandlerIn, std::shared_ptr<WorldI
     , worldBorder(provider->getWorldBorder())
     , lightUpdateBlockList(32768)
 {
-    // Java: ambientTickCountdown = rand.nextInt(12000) -- the mood sounds, stage 13; the draw keeps rand in step.
-    rand.nextInt(12000);
+    ambientTickCountdown = rand.nextInt(12000);
 }
 
 World::~World() = default;
@@ -124,7 +130,11 @@ bool World::setBlockState(const BlockPos& pos, const IBlockState* newState, int 
     }
     if ((flags & 2) != 0 && (!isRemote || (flags & 4) == 0) && chunk->isPopulated())
         markBlockForUpdate(pos);
-    // Java: with flag 1 on the server, notifyNeighborsRespectDebug and the comparator update -- stage 9.
+    if (!isRemote && (flags & 1) != 0) {
+        notifyNeighborsRespectDebug(pos, iblockstate->getBlock());
+        if (block->hasComparatorInputOverride())
+            updateComparatorOutputLevel(pos, newState->getBlock());
+    }
     return true;
 }
 
@@ -614,6 +624,544 @@ bool World::isSpawnChunk(int x, int z)
     const int j = z * 16 + 8 - blockpos.getZ();
     const int k = 128;
     return i >= -k && i <= k && j >= -k && j <= k;
+}
+
+BiomeGenBase* World::getBiomeGenForCoords(const BlockPos& pos)
+{
+    if (isBlockLoaded(pos))
+        return getChunkFromBlockCoords(pos)->getBiome(pos, provider->getWorldChunkManager());
+    return provider->getWorldChunkManager()->getBiomeGenerator(pos, BiomeGenBase::plains);
+}
+
+WorldChunkManager* World::getWorldChunkManager() const
+{
+    return provider->getWorldChunkManager();
+}
+
+bool World::destroyBlock(const BlockPos& pos, bool dropBlock)
+{
+    const IBlockState* iblockstate = getBlockState(pos);
+    Block* block = iblockstate->getBlock();
+    if (&block->getMaterial() == &Material::air)
+        return false;
+    playAuxSFX(2001, pos, Block::getStateId(iblockstate));
+    if (dropBlock)
+        block->dropBlockAsItem(this, pos, iblockstate, 0);
+    return setBlockState(pos, Blocks::air->getDefaultState(), 3);
+}
+
+void World::notifyNeighborsRespectDebug(const BlockPos& pos, Block* blockType)
+{
+    if (worldInfo->getTerrainType() != &WorldType::DEBUG_WORLD)
+        notifyNeighborsOfStateChange(pos, blockType);
+}
+
+void World::notifyNeighborsOfStateChange(const BlockPos& pos, Block* blockType)
+{
+    notifyBlockOfStateChange(pos.west(), blockType);
+    notifyBlockOfStateChange(pos.east(), blockType);
+    notifyBlockOfStateChange(pos.down(), blockType);
+    notifyBlockOfStateChange(pos.up(), blockType);
+    notifyBlockOfStateChange(pos.north(), blockType);
+    notifyBlockOfStateChange(pos.south(), blockType);
+}
+
+void World::notifyNeighborsOfStateExcept(const BlockPos& pos, Block* blockType, EnumFacing skipSide)
+{
+    if (skipSide != EnumFacing::WEST)
+        notifyBlockOfStateChange(pos.west(), blockType);
+    if (skipSide != EnumFacing::EAST)
+        notifyBlockOfStateChange(pos.east(), blockType);
+    if (skipSide != EnumFacing::DOWN)
+        notifyBlockOfStateChange(pos.down(), blockType);
+    if (skipSide != EnumFacing::UP)
+        notifyBlockOfStateChange(pos.up(), blockType);
+    if (skipSide != EnumFacing::NORTH)
+        notifyBlockOfStateChange(pos.north(), blockType);
+    if (skipSide != EnumFacing::SOUTH)
+        notifyBlockOfStateChange(pos.south(), blockType);
+}
+
+void World::notifyBlockOfStateChange(const BlockPos& pos, Block* blockIn)
+{
+    if (!isRemote) {
+        const IBlockState* iblockstate = getBlockState(pos);
+        iblockstate->getBlock()->onNeighborBlockChange(this, pos, iblockstate, blockIn);
+    }
+}
+
+void World::playSoundEffect(double x, double y, double z, const std::string& soundName, float volume, float pitch)
+{
+    for (size_t i = 0; i < worldAccesses.size(); ++i)
+        worldAccesses[i]->playSound(soundName, x, y, z, volume, pitch);
+}
+
+void World::playRecord(const BlockPos& pos, const std::string& name)
+{
+    for (size_t i = 0; i < worldAccesses.size(); ++i)
+        worldAccesses[i]->playRecord(name, pos);
+}
+
+void World::spawnParticle(int particleID, bool ignoreRange, double xCoord, double yCoord, double zCoord, double xOffset, double yOffset, double zOffset,
+    const std::vector<int>& parameters)
+{
+    for (size_t i = 0; i < worldAccesses.size(); ++i)
+        worldAccesses[i]->spawnParticle(particleID, ignoreRange, xCoord, yCoord, zCoord, xOffset, yOffset, zOffset, parameters);
+}
+
+bool World::addTileEntity(const std::shared_ptr<TileEntity>& tile)
+{
+    loadedTileEntityList.push_back(tile);
+    if (tile->isTickable())
+        tickableTileEntities.push_back(tile);
+    return true;
+}
+
+void World::addTileEntities(const std::vector<std::shared_ptr<TileEntity>>& tileEntityCollection)
+{
+    if (processingLoadedTiles) {
+        addedTileEntityList.insert(addedTileEntityList.end(), tileEntityCollection.begin(), tileEntityCollection.end());
+    } else {
+        for (const auto& tileentity : tileEntityCollection) {
+            loadedTileEntityList.push_back(tileentity);
+            if (tileentity->isTickable())
+                tickableTileEntities.push_back(tileentity);
+        }
+    }
+}
+
+namespace {
+
+// List.remove(Object): the first occurrence.
+void removeFirst(std::vector<std::shared_ptr<TileEntity>>& list, const TileEntity* tile)
+{
+    const auto it = std::find_if(list.begin(), list.end(), [tile](const auto& e) { return e.get() == tile; });
+    if (it != list.end())
+        list.erase(it);
+}
+
+} // namespace
+
+TileEntity* World::getTileEntity(const BlockPos& pos)
+{
+    return getTileEntityShared(pos).get();
+}
+
+std::shared_ptr<TileEntity> World::getTileEntityShared(const BlockPos& pos)
+{
+    if (!isValid(pos))
+        return nullptr;
+    std::shared_ptr<TileEntity> tileentity;
+    if (processingLoadedTiles) {
+        for (const auto& tileentity1 : addedTileEntityList) {
+            if (!tileentity1->isInvalid() && tileentity1->getPos() == pos) {
+                tileentity = tileentity1;
+                break;
+            }
+        }
+    }
+    if (!tileentity)
+        tileentity = getChunkFromBlockCoords(pos)->getTileEntity(pos, Chunk::EnumCreateEntityType::IMMEDIATE);
+    if (!tileentity) {
+        for (const auto& tileentity2 : addedTileEntityList) {
+            if (!tileentity2->isInvalid() && tileentity2->getPos() == pos) {
+                tileentity = tileentity2;
+                break;
+            }
+        }
+    }
+    return tileentity;
+}
+
+void World::setTileEntity(const BlockPos& pos, std::shared_ptr<TileEntity> tileEntityIn)
+{
+    if (tileEntityIn && !tileEntityIn->isInvalid()) {
+        if (processingLoadedTiles) {
+            tileEntityIn->setPos(pos);
+            for (auto it = addedTileEntityList.begin(); it != addedTileEntityList.end();) {
+                if ((*it)->getPos() == pos) {
+                    (*it)->invalidate();
+                    it = addedTileEntityList.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            addedTileEntityList.push_back(std::move(tileEntityIn));
+        } else {
+            addTileEntity(tileEntityIn);
+            getChunkFromBlockCoords(pos)->addTileEntity(pos, tileEntityIn);
+        }
+    }
+}
+
+void World::removeTileEntity(const BlockPos& pos)
+{
+    const std::shared_ptr<TileEntity> tileentity = getTileEntityShared(pos);
+    if (tileentity && processingLoadedTiles) {
+        tileentity->invalidate();
+        removeFirst(addedTileEntityList, tileentity.get());
+    } else {
+        if (tileentity) {
+            removeFirst(addedTileEntityList, tileentity.get());
+            removeFirst(loadedTileEntityList, tileentity.get());
+            removeFirst(tickableTileEntities, tileentity.get());
+        }
+        getChunkFromBlockCoords(pos)->removeTileEntity(pos);
+    }
+}
+
+void World::markTileEntityForRemoval(const std::shared_ptr<TileEntity>& tileEntityIn)
+{
+    tileEntitiesToBeRemoved.push_back(tileEntityIn);
+}
+
+bool World::isBlockFullCube(const BlockPos& pos)
+{
+    const IBlockState* iblockstate = getBlockState(pos);
+    const auto axisalignedbb = iblockstate->getBlock()->getCollisionBoundingBox(this, pos, iblockstate);
+    return axisalignedbb && axisalignedbb->getAverageEdgeLength() >= 1.0;
+}
+
+bool World::doesBlockHaveSolidTopSurface(IBlockAccess* blockAccess, const BlockPos& pos)
+{
+    const IBlockState* iblockstate = blockAccess->getBlockState(pos);
+    const Block* block = iblockstate->getBlock();
+    if (block->getMaterial().isOpaque() && block->isFullCube())
+        return true;
+    if (dynamic_cast<const BlockStairs*>(block))
+        return iblockstate->getValue(BlockStairs::HALF) == BlockStairs::EnumHalf::TOP;
+    if (dynamic_cast<const BlockSlab*>(block))
+        return iblockstate->getValue(BlockSlab::HALF) == BlockSlab::EnumBlockHalf::TOP;
+    if (dynamic_cast<const BlockHopper*>(block))
+        return true;
+    if (dynamic_cast<const BlockSnow*>(block))
+        return iblockstate->getValue(BlockSnow::LAYERS) == 7;
+    return false;
+}
+
+bool World::isBlockNormalCube(const BlockPos& pos, bool defaultValue)
+{
+    if (!isValid(pos))
+        return defaultValue;
+    Chunk* chunk = chunkProvider->provideChunk(pos.getX() >> 4, pos.getZ() >> 4);
+    if (chunk->isEmpty())
+        return defaultValue;
+    const Block* block = getBlockState(pos)->getBlock();
+    return block->getMaterial().isOpaque() && block->isFullCube();
+}
+
+void World::forceBlockUpdateTick(Block* blockType, const BlockPos& pos, Random& random)
+{
+    scheduledUpdatesAreImmediate = true;
+    blockType->updateTick(this, pos, getBlockState(pos), random);
+    scheduledUpdatesAreImmediate = false;
+}
+
+bool World::canBlockFreeze(const BlockPos& pos, bool noWaterAdj)
+{
+    BiomeGenBase* biomegenbase = getBiomeGenForCoords(pos);
+    const float f = biomegenbase->getFloatTemperature(pos);
+    if (f > 0.15f)
+        return false;
+    if (pos.getY() >= 0 && pos.getY() < 256 && getLightFor(EnumSkyBlock::BLOCK, pos) < 10) {
+        const IBlockState* iblockstate = getBlockState(pos);
+        const Block* block = iblockstate->getBlock();
+        if ((block == Blocks::water || block == Blocks::flowing_water) && iblockstate->getValue(BlockLiquid::LEVEL) == 0) {
+            if (!noWaterAdj)
+                return true;
+            const bool flag = isWater(pos.west()) && isWater(pos.east()) && isWater(pos.north()) && isWater(pos.south());
+            if (!flag)
+                return true;
+        }
+    }
+    return false;
+}
+
+bool World::isWater(const BlockPos& pos)
+{
+    return &getBlockState(pos)->getBlock()->getMaterial() == &Material::water;
+}
+
+bool World::canSnowAt(const BlockPos& pos, bool checkLight)
+{
+    BiomeGenBase* biomegenbase = getBiomeGenForCoords(pos);
+    const float f = biomegenbase->getFloatTemperature(pos);
+    if (f > 0.15f)
+        return false;
+    if (!checkLight)
+        return true;
+    if (pos.getY() >= 0 && pos.getY() < 256 && getLightFor(EnumSkyBlock::BLOCK, pos) < 10) {
+        const Block* block = getBlockState(pos)->getBlock();
+        if (&block->getMaterial() == &Material::air && Blocks::snow_layer->canPlaceBlockAt(this, pos))
+            return true;
+    }
+    return false;
+}
+
+void World::markChunkDirty(const BlockPos& pos, TileEntity*)
+{
+    if (isBlockLoaded(pos))
+        getChunkFromBlockCoords(pos)->setChunkModified();
+}
+
+int World::getStrongPower(const BlockPos& pos, EnumFacing direction)
+{
+    const IBlockState* iblockstate = getBlockState(pos);
+    return iblockstate->getBlock()->getStrongPower(this, pos, iblockstate, direction);
+}
+
+int World::getStrongPower(const BlockPos& pos)
+{
+    int i = 0;
+    for (const EnumFacing facing : { EnumFacing::DOWN, EnumFacing::UP, EnumFacing::NORTH, EnumFacing::SOUTH, EnumFacing::WEST, EnumFacing::EAST }) {
+        i = std::max(i, getStrongPower(pos.offset(facing), facing));
+        if (i >= 15)
+            return i;
+    }
+    return i;
+}
+
+int World::getRedstonePower(const BlockPos& pos, EnumFacing facing)
+{
+    const IBlockState* iblockstate = getBlockState(pos);
+    Block* block = iblockstate->getBlock();
+    return block->isNormalCube() ? getStrongPower(pos) : block->getWeakPower(this, pos, iblockstate, facing);
+}
+
+bool World::isBlockPowered(const BlockPos& pos)
+{
+    return getRedstonePower(pos.down(), EnumFacing::DOWN) > 0 || getRedstonePower(pos.up(), EnumFacing::UP) > 0
+        || getRedstonePower(pos.north(), EnumFacing::NORTH) > 0 || getRedstonePower(pos.south(), EnumFacing::SOUTH) > 0
+        || getRedstonePower(pos.west(), EnumFacing::WEST) > 0 || getRedstonePower(pos.east(), EnumFacing::EAST) > 0;
+}
+
+int World::isBlockIndirectlyGettingPowered(const BlockPos& pos)
+{
+    int i = 0;
+    for (const EnumFacing enumfacing : kFacings) {
+        const int j = getRedstonePower(pos.offset(enumfacing), enumfacing);
+        if (j >= 15)
+            return 15;
+        if (j > i)
+            i = j;
+    }
+    return i;
+}
+
+void World::addBlockEvent(const BlockPos& pos, Block* blockIn, int eventID, int eventParam)
+{
+    blockIn->onBlockEventReceived(this, pos, getBlockState(pos), eventID, eventParam);
+}
+
+GameRules& World::getGameRules() const
+{
+    return worldInfo->getGameRulesInstance();
+}
+
+bool World::isRainingAt(const BlockPos& strikePosition)
+{
+    if (!isRaining())
+        return false;
+    if (!canSeeSky(strikePosition))
+        return false;
+    if (getPrecipitationHeight(strikePosition).getY() > strikePosition.getY())
+        return false;
+    BiomeGenBase* biomegenbase = getBiomeGenForCoords(strikePosition);
+    return biomegenbase->getEnableSnow() ? false : (canSnowAt(strikePosition, false) ? false : biomegenbase->canRain());
+}
+
+bool World::isBlockinHighHumidity(const BlockPos& pos)
+{
+    return getBiomeGenForCoords(pos)->isHighHumidity();
+}
+
+void World::playBroadcastSound(int soundID, const BlockPos& pos, int data)
+{
+    for (size_t i = 0; i < worldAccesses.size(); ++i)
+        worldAccesses[i]->broadcastSound(soundID, pos, data);
+}
+
+void World::playAuxSFXAtEntity(EntityPlayer* player, int sfxType, const BlockPos& pos, int data)
+{
+    for (size_t i = 0; i < worldAccesses.size(); ++i)
+        worldAccesses[i]->playAuxSFX(player, sfxType, pos, data);
+}
+
+void World::sendBlockBreakProgress(int breakerId, const BlockPos& pos, int progress)
+{
+    for (size_t i = 0; i < worldAccesses.size(); ++i)
+        worldAccesses[i]->sendBlockBreakProgress(breakerId, pos, progress);
+}
+
+void World::updateComparatorOutputLevel(const BlockPos& pos, Block* blockIn)
+{
+    for (const EnumFacing enumfacing : kPlaneHorizontal) {
+        BlockPos blockpos = pos.offset(enumfacing);
+        if (isBlockLoaded(blockpos)) {
+            const IBlockState* iblockstate = getBlockState(blockpos);
+            if (Blocks::unpowered_comparator->isAssociated(iblockstate->getBlock())) {
+                iblockstate->getBlock()->onNeighborBlockChange(this, blockpos, iblockstate, blockIn);
+            } else if (iblockstate->getBlock()->isNormalCube()) {
+                blockpos = blockpos.offset(enumfacing);
+                iblockstate = getBlockState(blockpos);
+                if (Blocks::unpowered_comparator->isAssociated(iblockstate->getBlock()))
+                    iblockstate->getBlock()->onNeighborBlockChange(this, blockpos, iblockstate, blockIn);
+            }
+        }
+    }
+}
+
+EnumDifficulty World::getDifficulty() const
+{
+    return worldInfo->getDifficulty().value_or(EnumDifficulty::NORMAL);
+}
+
+std::vector<NextTickListEntry> World::getPendingBlockUpdates(Chunk*, bool)
+{
+    return {};
+}
+
+void World::tick()
+{
+    updateWeather();
+}
+
+void World::calculateInitialWeather()
+{
+    if (worldInfo->isRaining()) {
+        rainingStrength = 1.0f;
+        if (worldInfo->isThundering())
+            thunderingStrength = 1.0f;
+    }
+}
+
+void World::updateWeather()
+{
+    if (provider->getHasNoSky() || isRemote)
+        return;
+
+    int i = worldInfo->getCleanWeatherTime();
+    if (i > 0) {
+        --i;
+        worldInfo->setCleanWeatherTime(i);
+        worldInfo->setThunderTime(worldInfo->isThundering() ? 1 : 2);
+        worldInfo->setRainTime(worldInfo->isRaining() ? 1 : 2);
+    }
+
+    int j = worldInfo->getThunderTime();
+    if (j <= 0) {
+        if (worldInfo->isThundering())
+            worldInfo->setThunderTime(rand.nextInt(12000) + 3600);
+        else
+            worldInfo->setThunderTime(rand.nextInt(168000) + 12000);
+    } else {
+        --j;
+        worldInfo->setThunderTime(j);
+        if (j <= 0)
+            worldInfo->setThundering(!worldInfo->isThundering());
+    }
+
+    prevThunderingStrength = thunderingStrength;
+    if (worldInfo->isThundering())
+        thunderingStrength = static_cast<float>(static_cast<double>(thunderingStrength) + 0.01);
+    else
+        thunderingStrength = static_cast<float>(static_cast<double>(thunderingStrength) - 0.01);
+    thunderingStrength = MathHelper::clamp_float(thunderingStrength, 0.0f, 1.0f);
+
+    int k = worldInfo->getRainTime();
+    if (k <= 0) {
+        if (worldInfo->isRaining())
+            worldInfo->setRainTime(rand.nextInt(12000) + 12000);
+        else
+            worldInfo->setRainTime(rand.nextInt(168000) + 12000);
+    } else {
+        --k;
+        worldInfo->setRainTime(k);
+        if (k <= 0)
+            worldInfo->setRaining(!worldInfo->isRaining());
+    }
+
+    prevRainingStrength = rainingStrength;
+    if (worldInfo->isRaining())
+        rainingStrength = static_cast<float>(static_cast<double>(rainingStrength) + 0.01);
+    else
+        rainingStrength = static_cast<float>(static_cast<double>(rainingStrength) - 0.01);
+    rainingStrength = MathHelper::clamp_float(rainingStrength, 0.0f, 1.0f);
+}
+
+void World::setActivePlayerChunksAndCheckLight()
+{
+    activeChunkSet.clear();
+    theProfiler.startSection("buildList");
+
+    for (const std::shared_ptr<EntityPlayer>& entityplayer : playerEntities) {
+        const int j = MathHelper::floor_double(entityplayer->posX / 16.0);
+        const int k = MathHelper::floor_double(entityplayer->posZ / 16.0);
+        const int l = getRenderDistanceChunks();
+        for (int i1 = -l; i1 <= l; ++i1) {
+            for (int j1 = -l; j1 <= l; ++j1)
+                activeChunkSet.put(ChunkCoordIntPair(i1 + j, j1 + k), true);
+        }
+    }
+
+    theProfiler.endSection();
+
+    if (ambientTickCountdown > 0)
+        --ambientTickCountdown;
+
+    theProfiler.startSection("playerCheckLight");
+
+    if (!playerEntities.empty()) {
+        const int k1 = rand.nextInt(static_cast<int>(playerEntities.size()));
+        EntityPlayer* entityplayer1 = playerEntities[static_cast<size_t>(k1)].get();
+        const int l1 = MathHelper::floor_double(entityplayer1->posX) + rand.nextInt(11) - 5;
+        const int i2 = MathHelper::floor_double(entityplayer1->posY) + rand.nextInt(11) - 5;
+        const int j2 = MathHelper::floor_double(entityplayer1->posZ) + rand.nextInt(11) - 5;
+        checkLight(BlockPos(l1, i2, j2));
+    }
+
+    theProfiler.endSection();
+}
+
+void World::playMoodSoundAndCheckLight(int x, int z, Chunk* chunkIn)
+{
+    theProfiler.endStartSection("moodSound");
+
+    if (ambientTickCountdown == 0 && !isRemote) {
+        updateLCG = java::add(java::mul(updateLCG, 3), 1013904223);
+        const int i = updateLCG >> 2;
+        int j = i & 15;
+        int k = i >> 8 & 15;
+        const int l = i >> 16 & 255;
+        // Java: the light is read at the chunk-relative position (a vanilla quirk, kept).
+        const BlockPos blockpos(j, l, k);
+        Block* block = chunkIn->getBlock(blockpos);
+        j = j + x;
+        k = k + z;
+
+        if (&block->getMaterial() == &Material::air && getLight(blockpos) <= rand.nextInt(8) && getLightFor(EnumSkyBlock::SKY, blockpos) <= 0) {
+            EntityPlayer* entityplayer = getClosestPlayer(j + 0.5, l + 0.5, k + 0.5, 8.0);
+            if (entityplayer != nullptr && entityplayer->getDistanceSq(j + 0.5, l + 0.5, k + 0.5) > 4.0) {
+                const float pitch = 0.8f + rand.nextFloat() * 0.2f;
+                playSoundEffect(j + 0.5, l + 0.5, k + 0.5, "ambient.cave.cave", 0.7f, pitch);
+                ambientTickCountdown = rand.nextInt(12000) + 6000;
+            }
+        }
+    }
+
+    theProfiler.endStartSection("checkLight");
+    chunkIn->enqueueRelightChecks();
+}
+
+bool World::extinguishFire(EntityPlayer* player, const BlockPos& posIn, EnumFacing side)
+{
+    const BlockPos pos = posIn.offset(side);
+    if (getBlockState(pos)->getBlock() == Blocks::fire) {
+        playAuxSFXAtEntity(player, 1004, pos, 0);
+        setBlockToAir(pos);
+        return true;
+    }
+    return false;
 }
 
 } // namespace mc

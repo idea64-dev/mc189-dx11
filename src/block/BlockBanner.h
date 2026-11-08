@@ -19,10 +19,19 @@ public:
     {
     }
 
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos) override;
     bool isFullCube() const override { return false; }
+    bool isPassable(IBlockAccess*, const BlockPos&) override { return true; }
     bool isOpaqueCube() const override { return false; }
     bool canSpawnInBlock() const override { return true; }
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::banner; }
+    Item* getItem(World*, const BlockPos&) override { return Items::banner; }
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    void harvestBlock(World* worldIn, EntityPlayer* player, const BlockPos& pos, const IBlockState* state, TileEntity* te) override;
+
 
 protected:
     void construct() override
@@ -37,6 +46,9 @@ protected:
 class BlockBanner::BlockBannerHanging : public BlockBanner {
 public:
     MC_BLOCK_CLASS(BlockBannerHanging)
+
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
 
     const IBlockState* getStateFromMeta(int meta) const override
     {
@@ -59,6 +71,8 @@ protected:
 class BlockBanner::BlockBannerStanding : public BlockBanner {
 public:
     MC_BLOCK_CLASS(BlockBannerStanding)
+
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
 
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(ROTATION, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(ROTATION); }

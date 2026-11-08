@@ -17,6 +17,21 @@ public:
 
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void onBlockClicked(World* worldIn, const BlockPos& pos, EntityPlayer* playerIn) override;
+    int tickRate(World*) override { return 5; }
+    bool shouldSideBeRendered(IBlockAccess*, const BlockPos&, EnumFacing) override { return true; }
+    Item* getItem(World*, const BlockPos&) override { return nullptr; }
+
+private:
+    void checkFall(World* worldIn, const BlockPos& pos);
+    void teleport(World* worldIn, const BlockPos& pos);
+
+public:
 
 protected:
     void construct() override

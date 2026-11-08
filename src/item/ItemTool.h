@@ -2,8 +2,7 @@
 
 // Original: net/minecraft/item/ItemTool.java, ItemSpade.java, ItemPickaxe.java, ItemAxe.java, ItemSword.java,
 // ItemHoe.java and ItemShears.java.
-// Not ported yet: hitEntity / onBlockDestroyed (damage the tool, stage 8), ItemSword.onItemRightClick (blocking),
-// ItemHoe.onItemUse (tilling, stage 8) and the attack damage attribute modifiers (entity attributes, stage 10).
+// The attack damage attribute modifiers are in entity/EntityItemHooks.h.
 
 #include "item/Item.h"
 
@@ -11,11 +10,15 @@
 
 namespace mc {
 
+class IBlockState;
+
 class ItemTool : public Item {
 public:
     MC_ITEM_CLASS(ItemTool)
 
     float getStrVsBlock(const ItemStack& stack, const Block* block) const override;
+    bool hitEntity(ItemStack& stack, EntityLivingBase* target, EntityLivingBase* attacker) override;
+    bool onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn) override;
     bool isFull3D() const override { return true; }
     const ToolMaterial& getToolMaterial() const { return toolMaterial; }
     int getItemEnchantability() const override { return toolMaterial.getEnchantability(); }
@@ -72,6 +75,9 @@ public:
 
     float getDamageVsEntity() const { return material.getDamageVsEntity(); }
     float getStrVsBlock(const ItemStack& stack, const Block* block) const override;
+    bool hitEntity(ItemStack& stack, EntityLivingBase* target, EntityLivingBase* attacker) override;
+    bool onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn) override;
+    std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn) override;
     bool isFull3D() const override { return true; }
     EnumAction getItemUseAction(const ItemStack&) const override { return EnumAction::BLOCK; }
     int getMaxItemUseDuration(const ItemStack&) const override { return 72000; }
@@ -93,8 +99,12 @@ public:
 
     bool isFull3D() const override { return true; }
     std::string_view getMaterialName() const { return theToolMaterial.name(); }
+    bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ) override;
 
 protected:
+    bool useHoe(ItemStack& stack, EntityPlayer* player, World* worldIn, const BlockPos& target, const IBlockState* newState);
+
     const ToolMaterial& theToolMaterial;
 };
 
@@ -106,6 +116,7 @@ public:
 
     bool canHarvestBlock(const Block* block) const override;
     float getStrVsBlock(const ItemStack& stack, const Block* block) const override;
+    bool onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn) override;
 };
 
 } // namespace mc

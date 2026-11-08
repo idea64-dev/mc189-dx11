@@ -17,8 +17,15 @@ public:
     {
     }
 
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override
     {
@@ -37,6 +44,8 @@ protected:
         setCreativeTab(&CreativeTabs::tabDecorations);
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING }); }
+
+    bool canBlockStay(World* worldIn, const BlockPos& pos, EnumFacing facing);
 };
 
 inline const PropertyDirection BlockLadder::FACING("facing", isHorizontalFacing);

@@ -14,6 +14,8 @@
 
 namespace mc {
 
+class TileEntityNote;
+
 class BlockGlowstone : public Block {
 public:
     MC_BLOCK_CLASS(BlockGlowstone)
@@ -180,7 +182,17 @@ public:
     {
     }
 
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void onBlockClicked(World* worldIn, const BlockPos& pos, EntityPlayer* playerIn) override;
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
+    bool onBlockEventReceived(World* worldIn, const BlockPos& pos, const IBlockState* state, int eventID, int eventParam) override;
     int getRenderType() const override { return 3; }
+
+    // Java: TileEntityNote.triggerNote and changePitch, kept with the block until TileEntityNote gets them.
+    static void triggerNote(TileEntityNote* te, World* worldIn, const BlockPos& pos);
+    static void changePitch(TileEntityNote* te);
 
 protected:
     void construct() override
@@ -199,8 +211,11 @@ public:
     {
     }
 
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
     int quantityDropped(Random&) const override { return 0; }
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
     bool isOpaqueCube() const override { return false; }
+    Item* getItem(World*, const BlockPos&) override { return nullptr; }
     int getRenderType() const override { return 3; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }

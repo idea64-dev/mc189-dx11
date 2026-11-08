@@ -2,8 +2,6 @@
 
 // Original: net/minecraft/world/WorldProvider.java, WorldProviderSurface.java, WorldProviderHell.java and
 // WorldProviderEnd.java.
-// Not ported yet: the biome source (registerWorldChunkManager / getWorldChunkManager) and the chunk generators
-// (createChunkGenerator) -- world generation, stage 6.
 
 #include "util/BlockPos.h"
 #include "util/Vec3.h"
@@ -15,20 +13,24 @@
 
 namespace mc {
 
+class IChunkProvider;
 class World;
 class WorldBorder;
+class WorldChunkManager;
 class WorldType;
 
 class WorldProvider {
 public:
     static constexpr float moonPhaseFactors[8] { 1.0f, 0.75f, 0.5f, 0.25f, 0.0f, 0.25f, 0.5f, 0.75f };
 
-    virtual ~WorldProvider() = default;
+    WorldProvider();
+    virtual ~WorldProvider();
 
     // -1 Nether, 0 Overworld, 1 End; null otherwise.
     static std::unique_ptr<WorldProvider> getProviderForDimension(int dimension);
 
     void registerWorld(World* worldIn);
+    virtual std::unique_ptr<IChunkProvider> createChunkGenerator();
     virtual bool canCoordinateBeSpawn(int x, int z) const;
     virtual float calculateCelestialAngle(int64_t worldTime, float partialTicks) const;
     int getMoonPhase(int64_t worldTime) const;
@@ -50,14 +52,15 @@ public:
     bool getHasNoSky() const { return hasNoSky; }
     const std::array<float, 16>& getLightBrightnessTable() const { return lightBrightnessTable; }
     int getDimensionId() const { return dimensionId; }
+    WorldChunkManager* getWorldChunkManager() const { return worldChunkMgr.get(); }
     virtual std::unique_ptr<WorldBorder> getWorldBorder() const;
 
 protected:
     virtual void generateLightBrightnessTable();
-    // Java: also creates the biome source (stage 6); here only the dimension flags.
-    virtual void registerWorldChunkManager() { }
+    virtual void registerWorldChunkManager();
 
     World* worldObj = nullptr;
+    std::unique_ptr<WorldChunkManager> worldChunkMgr;
     bool isHellWorld = false;
     bool hasNoSky = false;
     std::array<float, 16> lightBrightnessTable {};
@@ -85,6 +88,7 @@ public:
     std::string getDimensionName() const override { return "Nether"; }
     std::string getInternalNameSuffix() const override { return "_nether"; }
     std::unique_ptr<WorldBorder> getWorldBorder() const override;
+    std::unique_ptr<IChunkProvider> createChunkGenerator() override;
 
 protected:
     void registerWorldChunkManager() override;
@@ -106,6 +110,7 @@ public:
     bool doesXZShowFog(int, int) const override { return true; }
     std::string getDimensionName() const override { return "The End"; }
     std::string getInternalNameSuffix() const override { return "_end"; }
+    std::unique_ptr<IChunkProvider> createChunkGenerator() override;
 
 protected:
     void registerWorldChunkManager() override;

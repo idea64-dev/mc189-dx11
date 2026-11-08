@@ -17,8 +17,11 @@ public:
 
     const MapColor& getMapColor(const IBlockState*) const override { return MapColor::woodColor; }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return nullptr; }
+    bool isReplaceable(World*, const BlockPos&) override { return true; }
+    // Java: harvestBlock drops the bush itself for shears -- the player comes with stage 8.
 
 protected:
+    bool canPlaceBlockOn(const Block* ground) const override;
     void construct() override
     {
         BlockBush::construct();

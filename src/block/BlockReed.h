@@ -24,6 +24,18 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(AGE, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(AGE); }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::reeds; }
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    bool canBlockStay(World* worldIn, const BlockPos& pos) { return canPlaceBlockAt(worldIn, pos); }
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    Item* getItem(World*, const BlockPos&) override { return Items::reeds; }
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+
+protected:
+    bool checkForDrop(World* worldIn, const BlockPos& pos, const IBlockState* state);
+
+public:
 
 protected:
     void construct() override
@@ -57,6 +69,19 @@ public:
         return i;
     }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 6); }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void grow(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand);
+    void generateTree(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand);
+    bool isTypeAt(World* worldIn, const BlockPos& pos, BlockPlanks::EnumType type);
+    // Java: IGrowable
+    bool canGrow(World*, const BlockPos&, const IBlockState*, bool) { return true; }
+    bool canUseBonemeal(World* worldIn, Random&, const BlockPos&, const IBlockState*);
+    void grow(World* worldIn, Random& rand, const BlockPos& pos, const IBlockState* state) { grow(worldIn, pos, state, rand); }
+
+private:
+    bool func_181624_a(World* worldIn, const BlockPos& pos, int x, int z, BlockPlanks::EnumType type);
+
+public:
 
 protected:
     void construct() override

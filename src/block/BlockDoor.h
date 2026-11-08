@@ -25,8 +25,25 @@ public:
     }
 
     bool isOpaqueCube() const override { return false; }
+    bool isPassable(IBlockAccess* worldIn, const BlockPos& pos) override;
     bool isFullCube() const override { return false; }
+    AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void toggleDoor(World* worldIn, const BlockPos& pos, bool open);
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    std::optional<MovingObjectPosition> collisionRayTrace(World* worldIn, const BlockPos& pos, const Vec3& start, const Vec3& end) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
     int getMobilityFlag() const override { return 1; }
+    static int combineMetadata(IBlockAccess* worldIn, const BlockPos& pos);
+    Item* getItem(World*, const BlockPos&) override { return getDoorItem(); }
+    // Java: onBlockHarvested removes the lower half for creative players -- the player comes with stage 8.
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    static bool isOpen(IBlockAccess* worldIn, const BlockPos& pos);
+    static EnumFacing getFacing(IBlockAccess* worldIn, const BlockPos& pos);
+    static EnumFacing getFacing(int combinedMeta) { return rotateYCCW(getHorizontal(combinedMeta & 3)); }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override
     {
@@ -60,7 +77,13 @@ protected:
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &HALF, &FACING, &OPEN, &HINGE, &POWERED }); }
 
+    static int removeHalfBit(int meta) { return meta & 7; }
+    static bool isOpen(int combinedMeta) { return (combinedMeta & 4) != 0; }
+    static bool isTop(int meta) { return (meta & 8) != 0; }
+    static bool isHingeLeft(int combinedMeta) { return (combinedMeta & 16) != 0; }
+
 private:
+    void setBoundBasedOnMeta(int combinedMeta);
     // Java: getItem() -- the door item of this door block.
     Item* getDoorItem() const;
 };

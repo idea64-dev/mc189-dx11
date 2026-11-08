@@ -65,4 +65,12 @@ std::optional<float> tryParseFloat(std::string_view text);
 // String.trim(): strips characters <= ' ' from both ends (UTF-8 bytes of non-ASCII characters are all above).
 std::string trim(std::string_view text);
 
+// String.split with a literal (non-regex) separator: limit > 0 keeps at most limit parts, 0 drops trailing
+// empty strings, < 0 keeps everything. "" gives {""}.
+std::vector<std::string> split(std::string_view text, std::string_view separator, int limit = 0);
+
+// String.toLowerCase / toUpperCase for ASCII letters (other characters are kept).
+std::string toLowerCase(std::string_view text);
+std::string toUpperCase(std::string_view text);
+
 } // namespace mc::java

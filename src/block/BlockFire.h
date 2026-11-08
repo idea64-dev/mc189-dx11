@@ -1,8 +1,10 @@
 #pragma once
 
-// Original: net/minecraft/block/BlockFire.java (spreading and the flammability table come with world ticks, stage 9)
+// Original: net/minecraft/block/BlockFire.java
 
 #include "block/BlockBasics.h"
+
+#include <unordered_map>
 
 namespace mc {
 
@@ -33,6 +35,33 @@ public:
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(AGE, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(AGE); }
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    // Java: the flammability table, filled from Bootstrap after the blocks are registered.
+    static void init();
+    void setFireInfo(const Block* blockIn, int encouragement, int flammability);
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    int tickRate(World*) override { return 30; }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    bool canCatchFire(IBlockAccess* worldIn, const BlockPos& pos);
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+
+protected:
+    bool canDie(World* worldIn, const BlockPos& pos);
+
+private:
+    int getFlammability(const Block* blockIn) const;
+    int getEncouragement(const Block* blockIn) const;
+    void catchOnFire(World* worldIn, const BlockPos& pos, int chance, Random& random, int age);
+    bool canNeighborCatchFire(World* worldIn, const BlockPos& pos);
+    int getNeighborEncouragement(World* worldIn, const BlockPos& pos);
+
+    std::unordered_map<const Block*, int> encouragements;
+    std::unordered_map<const Block*, int> flammabilities;
+
+public:
 
 protected:
     void construct() override

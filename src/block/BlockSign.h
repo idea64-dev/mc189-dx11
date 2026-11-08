@@ -13,10 +13,19 @@ public:
     {
     }
 
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos) override;
     bool isFullCube() const override { return false; }
+    bool isPassable(IBlockAccess*, const BlockPos&) override { return true; }
     bool isOpaqueCube() const override { return false; }
     bool canSpawnInBlock() const override { return true; }
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::sign; }
+    Item* getItem(World*, const BlockPos&) override { return Items::sign; }
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+
 
 protected:
     void construct() override
@@ -33,6 +42,8 @@ public:
     MC_BLOCK_CLASS(BlockStandingSign)
 
     static const PropertyInteger ROTATION;
+
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
 
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(ROTATION, meta); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(ROTATION); }
@@ -51,6 +62,9 @@ public:
     MC_BLOCK_CLASS(BlockWallSign)
 
     static const PropertyDirection FACING;
+
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
 
     const IBlockState* getStateFromMeta(int meta) const override
     {

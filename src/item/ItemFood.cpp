@@ -1,8 +1,13 @@
 #include "item/ItemFood.h"
 
+#include "block/Block.h"
 #include "creativetab/CreativeTabs.h"
+#include "entity/player/EntityPlayer.h"
+#include "init/Items.h"
 #include "item/ItemStack.h"
+#include "potion/Potion.h"
 #include "potion/PotionHelper.h"
+#include "world/World.h"
 
 namespace mc {
 
@@ -79,6 +84,90 @@ ItemSeeds::ItemSeeds(Block* cropsIn, Block* soil)
     , soilBlockID(soil)
 {
     setCreativeTab(&CreativeTabs::tabMaterials);
+}
+
+std::shared_ptr<ItemStack> ItemFood::onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World*, EntityPlayer* playerIn)
+{
+    if (playerIn->canEat(alwaysEdible))
+        playerIn->setItemInUse(itemStackIn, getMaxItemUseDuration(*itemStackIn));
+    return itemStackIn;
+}
+
+std::shared_ptr<ItemStack> ItemFood::onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn)
+{
+    --stack->stackSize;
+    playerIn->getFoodStats().addStats(*this, *stack);
+    worldIn->playSoundAtEntity(playerIn, "random.burp", 0.5f, worldIn->rand.nextFloat() * 0.1f + 0.9f);
+    onFoodEaten(*stack, worldIn, playerIn);
+    // Java: triggerAchievement(StatList.objectUseStats[...]) -- stage 12.
+    return stack;
+}
+
+void ItemFood::onFoodEaten(ItemStack&, World* worldIn, EntityPlayer* player)
+{
+    if (!worldIn->isRemote && potionId > 0 && worldIn->rand.nextFloat() < potionEffectProbability)
+        player->addPotionEffect(PotionEffect(potionId, potionDuration * 20, potionAmplifier));
+}
+
+void ItemAppleGold::onFoodEaten(ItemStack& stack, World* worldIn, EntityPlayer* player)
+{
+    if (!worldIn->isRemote)
+        player->addPotionEffect(PotionEffect(Potion::absorption->id, 2400, 0));
+
+    if (stack.getMetadata() > 0) {
+        if (!worldIn->isRemote) {
+            player->addPotionEffect(PotionEffect(Potion::regeneration->id, 600, 4));
+            player->addPotionEffect(PotionEffect(Potion::resistance->id, 6000, 0));
+            player->addPotionEffect(PotionEffect(Potion::fireResistance->id, 6000, 0));
+        }
+    } else {
+        ItemFood::onFoodEaten(stack, worldIn, player);
+    }
+}
+
+void ItemFishFood::onFoodEaten(ItemStack& stack, World* worldIn, EntityPlayer* player)
+{
+    if (byItemStack(stack) == FishType::PUFFERFISH) {
+        player->addPotionEffect(PotionEffect(Potion::poison->id, 1200, 3));
+        player->addPotionEffect(PotionEffect(Potion::hunger->id, 300, 2));
+        player->addPotionEffect(PotionEffect(Potion::confusion->id, 300, 1));
+    }
+    ItemFood::onFoodEaten(stack, worldIn, player);
+}
+
+std::shared_ptr<ItemStack> ItemSoup::onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn)
+{
+    ItemFood::onItemUseFinish(stack, worldIn, playerIn);
+    return std::make_shared<ItemStack>(Items::bowl);
+}
+
+namespace {
+
+// ItemSeeds.onItemUse and ItemSeedFood.onItemUse.
+bool plant(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, Block* crops, Block* soil)
+{
+    if (side != EnumFacing::UP)
+        return false;
+    if (!playerIn->canPlayerEdit(pos.offset(side), side, &stack))
+        return false;
+    if (worldIn->getBlockState(pos)->getBlock() == soil && worldIn->isAirBlock(pos.up())) {
+        worldIn->setBlockState(pos.up(), crops->getDefaultState());
+        --stack.stackSize;
+        return true;
+    }
+    return false;
+}
+
+} // namespace
+
+bool ItemSeedFood::onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float, float, float)
+{
+    return plant(stack, playerIn, worldIn, pos, side, crops, soilId);
+}
+
+bool ItemSeeds::onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float, float, float)
+{
+    return plant(stack, playerIn, worldIn, pos, side, crops, soilBlockID);
 }
 
 } // namespace mc

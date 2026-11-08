@@ -5,7 +5,17 @@
 #include "init/Blocks.h"
 #include "util/MathHelper.h"
 #include "world/World.h"
+#include "world/WorldType.h"
+#include "world/biome/BiomeGenBase.h"
+#include "world/biome/WorldChunkManager.h"
+#include "world/chunk/Chunk.h"
 #include "world/border/WorldBorder.h"
+#include "world/gen/ChunkProviderDebug.h"
+#include "world/gen/ChunkProviderEnd.h"
+#include "world/gen/ChunkProviderFlat.h"
+#include "world/gen/ChunkProviderGenerate.h"
+#include "world/gen/ChunkProviderHell.h"
+#include "world/gen/FlatGeneratorInfo.h"
 #include "world/storage/WorldInfo.h"
 
 namespace mc {
@@ -18,6 +28,32 @@ std::unique_ptr<WorldProvider> WorldProvider::getProviderForDimension(int dimens
     case 1: return std::make_unique<WorldProviderEnd>();
     default: return nullptr;
     }
+}
+
+WorldProvider::WorldProvider() = default;
+WorldProvider::~WorldProvider() = default;
+
+void WorldProvider::registerWorldChunkManager()
+{
+    const WorldType* worldtype = worldObj->getWorldInfo().getTerrainType();
+    if (worldtype == &WorldType::FLAT) {
+        const FlatGeneratorInfo flatgeneratorinfo = FlatGeneratorInfo::createFlatGeneratorFromString(worldObj->getWorldInfo().getGeneratorOptions());
+        worldChunkMgr = std::make_unique<WorldChunkManagerHell>(
+            BiomeGenBase::getBiomeFromBiomeList(flatgeneratorinfo.getBiome(), BiomeGenBase::field_180279_ad), 0.5f);
+    } else if (worldtype == &WorldType::DEBUG_WORLD) {
+        worldChunkMgr = std::make_unique<WorldChunkManagerHell>(BiomeGenBase::plains, 0.0f);
+    } else {
+        worldChunkMgr = std::make_unique<WorldChunkManager>(worldObj);
+    }
+}
+
+std::unique_ptr<IChunkProvider> WorldProvider::createChunkGenerator()
+{
+    if (terrainType == &WorldType::FLAT)
+        return std::make_unique<ChunkProviderFlat>(worldObj, worldObj->getSeed(), worldObj->getWorldInfo().isMapFeaturesEnabled(), generatorSettings);
+    if (terrainType == &WorldType::DEBUG_WORLD)
+        return std::make_unique<ChunkProviderDebug>(worldObj);
+    return std::make_unique<ChunkProviderGenerate>(worldObj, worldObj->getSeed(), worldObj->getWorldInfo().isMapFeaturesEnabled(), generatorSettings);
 }
 
 void WorldProvider::registerWorld(World* worldIn)
@@ -117,7 +153,7 @@ public:
 
 void WorldProviderHell::registerWorldChunkManager()
 {
-    // Java: worldChunkMgr = new WorldChunkManagerHell(BiomeGenBase.hell, 0.0F) -- stage 6.
+    worldChunkMgr = std::make_unique<WorldChunkManagerHell>(BiomeGenBase::hell, 0.0f);
     isHellWorld = true;
     hasNoSky = true;
     dimensionId = -1;
@@ -137,11 +173,21 @@ std::unique_ptr<WorldBorder> WorldProviderHell::getWorldBorder() const
     return std::make_unique<NetherWorldBorder>();
 }
 
+std::unique_ptr<IChunkProvider> WorldProviderHell::createChunkGenerator()
+{
+    return std::make_unique<ChunkProviderHell>(worldObj, worldObj->getWorldInfo().isMapFeaturesEnabled(), worldObj->getSeed());
+}
+
 // --- End ---
+
+std::unique_ptr<IChunkProvider> WorldProviderEnd::createChunkGenerator()
+{
+    return std::make_unique<ChunkProviderEnd>(worldObj, worldObj->getSeed());
+}
 
 void WorldProviderEnd::registerWorldChunkManager()
 {
-    // Java: worldChunkMgr = new WorldChunkManagerHell(BiomeGenBase.sky, 0.0F) -- stage 6.
+    worldChunkMgr = std::make_unique<WorldChunkManagerHell>(BiomeGenBase::sky, 0.0f);
     dimensionId = 1;
     hasNoSky = true;
 }

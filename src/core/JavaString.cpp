@@ -355,4 +355,45 @@ std::optional<std::string> format(std::string_view pattern, std::span<const std:
     return out;
 }
 
+std::vector<std::string> split(std::string_view text, std::string_view separator, int limit)
+{
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while (limit <= 0 || static_cast<int>(parts.size()) < limit - 1) {
+        const size_t found = text.find(separator, start);
+        if (found == std::string_view::npos)
+            break;
+        parts.emplace_back(text.substr(start, found - start));
+        start = found + separator.size();
+    }
+    if (parts.empty())
+        return { std::string(text) };
+    parts.emplace_back(text.substr(start));
+    if (limit == 0) {
+        while (!parts.empty() && parts.back().empty())
+            parts.pop_back();
+    }
+    return parts;
+}
+
+std::string toLowerCase(std::string_view text)
+{
+    std::string out(text);
+    for (char& c : out) {
+        if (c >= 'A' && c <= 'Z')
+            c = static_cast<char>(c - 'A' + 'a');
+    }
+    return out;
+}
+
+std::string toUpperCase(std::string_view text)
+{
+    std::string out(text);
+    for (char& c : out) {
+        if (c >= 'a' && c <= 'z')
+            c = static_cast<char>(c - 'a' + 'A');
+    }
+    return out;
+}
+
 } // namespace mc::java

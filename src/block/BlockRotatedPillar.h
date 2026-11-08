@@ -30,6 +30,9 @@ public:
     {
     }
 
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+
     const IBlockState* getStateFromMeta(int meta) const override
     {
         Axis axis = Axis::Y;
@@ -81,6 +84,10 @@ public:
         : BlockRotatedPillar(Material::wood)
     {
     }
+
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
 
 protected:
     void construct() override

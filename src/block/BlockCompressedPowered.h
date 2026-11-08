@@ -16,6 +16,7 @@ public:
     }
 
     bool canProvidePower() const override { return true; }
+    int getWeakPower(IBlockAccess*, const BlockPos&, const IBlockState*, EnumFacing) override { return 15; }
 };
 
 } // namespace mc

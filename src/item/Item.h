@@ -1,17 +1,17 @@
 #pragma once
 
 // Original: net/minecraft/item/Item.java (with Item.ToolMaterial), EnumAction.java and EnumRarity.java.
-// Ported so far: everything that doesn't need a world, a player or an entity -- construction, the registry,
-// stack limits, damage, names, colors, use actions, rarity, sub-items and tool speeds. The Java callbacks that
-// act on the world (onItemUse, onItemRightClick, onItemUseFinish, onPlayerStoppedUsing, onUpdate, onCreated,
-// hitEntity, onBlockDestroyed, itemInteractionForEntity, addInformation, getItemAttributeModifiers,
-// getMovingObjectPositionFromPlayer) come with the player, world ticks, entities, the inventory screens and the game systems (stages 8 to 12).
+// The world callbacks (onItemUse, onItemRightClick, onItemUseFinish, ...) take the stack the way Java does. The
+// ones that may hand back a different stack (right click, use finish) take and return shared pointers, so the
+// callers can still compare identities. Not ported yet: addInformation (tooltips, stage 11) and
+// getItemAttributeModifiers (entity/EntityItemHooks.h has it).
 //
 // Unlike blocks, item constructors make no virtual calls, so items are built in one step. They are owned by
 // Item::create (registration) and live for the rest of the program.
 
 #include "util/Registry.h"
 #include "util/ResourceLocation.h"
+#include "util/Vec3.h"
 
 #include <memory>
 #include <optional>
@@ -26,9 +26,16 @@ namespace mc {
 
 class Block;
 class CreativeTabs;
+class Entity;
+class EntityLivingBase;
+class EntityPlayer;
 class ItemStack;
 class NBTTagCompound;
 class Random;
+class World;
+struct BlockPos;
+struct MovingObjectPosition;
+enum class EnumFacing;
 
 enum class EnumAction { NONE, EAT, DRINK, BLOCK, BOW };
 
@@ -163,6 +170,19 @@ public:
     }
     virtual bool canItemEditBlocks() const { return false; }
     virtual bool getIsRepairable(const ItemStack& toRepair, const ItemStack& repair) const;
+
+    // --- world callbacks (Java defaults) ---
+    virtual bool onItemUse(ItemStack& stack, EntityPlayer* playerIn, World* worldIn, const BlockPos& pos, EnumFacing side, float hitX, float hitY,
+        float hitZ);
+    // Returns the stack the player holds afterwards: the same one, or a new one.
+    virtual std::shared_ptr<ItemStack> onItemRightClick(const std::shared_ptr<ItemStack>& itemStackIn, World* worldIn, EntityPlayer* playerIn);
+    virtual std::shared_ptr<ItemStack> onItemUseFinish(const std::shared_ptr<ItemStack>& stack, World* worldIn, EntityPlayer* playerIn);
+    virtual bool hitEntity(ItemStack& stack, EntityLivingBase* target, EntityLivingBase* attacker);
+    virtual bool onBlockDestroyed(ItemStack& stack, World* worldIn, Block* blockIn, const BlockPos& pos, EntityLivingBase* playerIn);
+    virtual bool itemInteractionForEntity(ItemStack& stack, EntityPlayer* playerIn, EntityLivingBase* target);
+    virtual void onUpdate(ItemStack&, World*, Entity*, int, bool) { }
+    virtual void onCreated(ItemStack&, World*, EntityPlayer*) { }
+    virtual void onPlayerStoppedUsing(ItemStack&, World*, EntityPlayer*, int) { }
     // Java: getClass().getSimpleName(), for the registry dump.
     virtual std::string_view getClassName() const { return "Item"; }
 
@@ -187,6 +207,9 @@ public:
     }
 
 protected:
+    // Java: the block the player looks at within 5 blocks; nullopt for none.
+    std::optional<MovingObjectPosition> getMovingObjectPositionFromPlayer(World* worldIn, EntityPlayer* playerIn, bool useLiquids) const;
+
     int maxStackSize = 64;
     bool bFull3D = false;
     bool hasSubtypes = false;

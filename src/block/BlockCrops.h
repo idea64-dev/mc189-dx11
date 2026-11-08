@@ -17,8 +17,19 @@ public:
     Item* getItemDropped(const IBlockState* state, Random&, int) const override { return state->getValue(AGE) == 7 ? getCrop() : getSeed(); }
     virtual Item* getSeed() const;
     virtual Item* getCrop() const;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void grow(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    static float getGrowthChance(const Block* blockIn, World* worldIn, const BlockPos& pos);
+    bool canBlockStay(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
+    Item* getItem(World*, const BlockPos&) override { return getSeed(); }
+    // Java: IGrowable
+    bool canGrow(World*, const BlockPos&, const IBlockState* state, bool) { return state->getValue(AGE) < 7; }
+    bool canUseBonemeal(World*, Random&, const BlockPos&, const IBlockState*) { return true; }
+    void grow(World* worldIn, Random&, const BlockPos& pos, const IBlockState* state) { grow(worldIn, pos, state); }
 
 protected:
+    bool canPlaceBlockOn(const Block* ground) const override { return ground == Blocks::farmland; }
     void construct() override
     {
         BlockBush::construct();
@@ -44,7 +55,7 @@ public:
 class BlockPotato : public BlockCrops {
 public:
     MC_BLOCK_CLASS(BlockPotato)
-    // Java: dropBlockAsItemWithChance adds a poisonous potato now and then (world drops, stage 9).
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
     Item* getSeed() const override;
     Item* getCrop() const override;
 };

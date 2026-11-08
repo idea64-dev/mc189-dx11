@@ -1,6 +1,6 @@
 #pragma once
 
-// Original: net/minecraft/block/BlockStairs.java (shapes and collision come with the world, stage 9)
+// Original: net/minecraft/block/BlockStairs.java
 
 #include "block/BlockBasics.h"
 
@@ -24,8 +24,38 @@ public:
     {
     }
 
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    void setBaseCollisionBounds(IBlockAccess* worldIn, const BlockPos& pos);
+    static bool isBlockStairs(const Block* blockIn);
+    static bool isSameStair(IBlockAccess* worldIn, const BlockPos& pos, const IBlockState* state);
+    int func_176307_f(IBlockAccess* blockAccess, const BlockPos& pos);
+    int func_176305_g(IBlockAccess* blockAccess, const BlockPos& pos);
+    bool func_176306_h(IBlockAccess* blockAccess, const BlockPos& pos);
+    bool func_176304_i(IBlockAccess* blockAccess, const BlockPos& pos);
+    void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void onBlockClicked(World* worldIn, const BlockPos& pos, EntityPlayer* playerIn) override;
+    void onBlockDestroyedByPlayer(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    int getMixedBrightnessForBlock(IBlockAccess* worldIn, const BlockPos& pos) override;
+    int tickRate(World* worldIn) override;
+    AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos) override;
+    Vec3 modifyAcceleration(World* worldIn, const BlockPos& pos, Entity* entityIn, const Vec3& motion) override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    using Block::onEntityCollidedWithBlock;
+    void onEntityCollidedWithBlock(World* worldIn, const BlockPos& pos, Entity* entityIn) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void onBlockDestroyedByExplosion(World* worldIn, const BlockPos& pos, Explosion* explosionIn) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    std::optional<MovingObjectPosition> collisionRayTrace(World* worldIn, const BlockPos& pos, const Vec3& start, const Vec3& end) override;
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
     float getExplosionResistance() const override { return modelBlock->getExplosionResistance(); }
     EnumWorldBlockLayer getBlockLayer() const override { return modelBlock->getBlockLayer(); }
     bool isCollidable() const override { return modelBlock->isCollidable(); }
@@ -61,6 +91,8 @@ protected:
 private:
     Block* modelBlock;
     const IBlockState* modelState;
+    bool hasRaytraced = false;
+    int rayTracePass = 0;
 };
 
 MC_ENUM_TRAITS(BlockStairs::EnumHalf, 2, value == BlockStairs::EnumHalf::TOP ? "top" : "bottom")

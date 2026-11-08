@@ -54,6 +54,10 @@ public:
     EnumOffsetType getOffsetType() const override { return EnumOffsetType::XZ; }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, 0, 6); }
     Item* getItemDropped(const IBlockState* state, Random& rand, int) const override;
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    bool isReplaceable(World* worldIn, const BlockPos& pos) override;
+    bool canBlockStay(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void placeAt(World* worldIn, const BlockPos& lowerPos, EnumPlantType variant, int flags);
 
 protected:
     void construct() override

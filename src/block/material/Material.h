@@ -47,6 +47,9 @@ public:
     const MapColor& getMaterialMapColor() const { return materialMapColor; }
 
 private:
+#ifdef TRANSPARENT
+#undef TRANSPARENT // wingdi.h
+#endif
     enum class Kind { NORMAL, LIQUID, LOGIC, TRANSPARENT, PORTAL, WEB };
 
     Material(const MapColor& color, Kind kind = Kind::NORMAL);

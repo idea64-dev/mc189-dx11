@@ -9,6 +9,7 @@
 #include "init/Items.h"
 #include "item/ItemStack.h"
 #include "util/Random.h"
+#include "util/Vec3.h"
 
 namespace mc {
 

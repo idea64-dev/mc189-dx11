@@ -1,5 +1,7 @@
 #include "entity/EntityList.h"
 
+#include "entity/Entity.h"
+
 namespace mc {
 
 namespace {
@@ -118,6 +120,34 @@ const EntityList::EntityEggInfo* EntityList::getEggInfo(int id)
             return &egg;
     }
     return nullptr;
+}
+
+std::optional<std::string> EntityList::getEntityString(std::string_view javaClassName)
+{
+    struct ClassMapping {
+        std::string_view className;
+        const char* name;
+    };
+    static constexpr ClassMapping kClasses[] { { "EntityItem", "Item" }, { "EntityXPOrb", "XPOrb" }, { "EntityEgg", "ThrownEgg" }, { "EntityLeashKnot", "LeashKnot" }, { "EntityPainting", "Painting" }, { "EntityArrow", "Arrow" }, { "EntitySnowball", "Snowball" }, { "EntityLargeFireball", "Fireball" }, { "EntitySmallFireball", "SmallFireball" }, { "EntityEnderPearl", "ThrownEnderpearl" }, { "EntityEnderEye", "EyeOfEnderSignal" }, { "EntityPotion", "ThrownPotion" }, { "EntityExpBottle", "ThrownExpBottle" }, { "EntityItemFrame", "ItemFrame" }, { "EntityWitherSkull", "WitherSkull" }, { "EntityTNTPrimed", "PrimedTnt" }, { "EntityFallingBlock", "FallingSand" }, { "EntityFireworkRocket", "FireworksRocketEntity" }, { "EntityArmorStand", "ArmorStand" }, { "EntityBoat", "Boat" }, { "EntityMinecartEmpty", "MinecartRideable" }, { "EntityMinecartChest", "MinecartChest" }, { "EntityMinecartFurnace", "MinecartFurnace" }, { "EntityMinecartTNT", "MinecartTNT" }, { "EntityMinecartHopper", "MinecartHopper" }, { "EntityMinecartMobSpawner", "MinecartSpawner" }, { "EntityMinecartCommandBlock", "MinecartCommandBlock" }, { "EntityLiving", "Mob" }, { "EntityMob", "Monster" }, { "EntityCreeper", "Creeper" }, { "EntitySkeleton", "Skeleton" }, { "EntitySpider", "Spider" }, { "EntityGiantZombie", "Giant" }, { "EntityZombie", "Zombie" }, { "EntitySlime", "Slime" }, { "EntityGhast", "Ghast" }, { "EntityPigZombie", "PigZombie" }, { "EntityEnderman", "Enderman" }, { "EntityCaveSpider", "CaveSpider" }, { "EntitySilverfish", "Silverfish" }, { "EntityBlaze", "Blaze" }, { "EntityMagmaCube", "LavaSlime" }, { "EntityDragon", "EnderDragon" }, { "EntityWither", "WitherBoss" }, { "EntityBat", "Bat" }, { "EntityWitch", "Witch" }, { "EntityEndermite", "Endermite" }, { "EntityGuardian", "Guardian" }, { "EntityPig", "Pig" }, { "EntitySheep", "Sheep" }, { "EntityCow", "Cow" }, { "EntityChicken", "Chicken" }, { "EntitySquid", "Squid" }, { "EntityWolf", "Wolf" }, { "EntityMooshroom", "MushroomCow" }, { "EntitySnowman", "SnowMan" }, { "EntityOcelot", "Ozelot" }, { "EntityIronGolem", "VillagerGolem" }, { "EntityHorse", "EntityHorse" }, { "EntityRabbit", "Rabbit" }, { "EntityVillager", "Villager" }, { "EntityEnderCrystal", "EnderCrystal" }, };
+    for (const ClassMapping& mapping : kClasses) {
+        if (mapping.className == javaClassName)
+            return std::string(mapping.name);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> EntityList::getEntityString(const Entity* entity)
+{
+    return getEntityString(entity->getClassName());
+}
+
+int EntityList::getEntityID(const Entity* entity)
+{
+    const std::optional<std::string> name = getEntityString(entity->getClassName());
+    if (!name)
+        return 0;
+    const int id = getIDFromString(*name);
+    return id < 0 ? 0 : id;
 }
 
 } // namespace mc

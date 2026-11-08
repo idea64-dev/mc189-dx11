@@ -24,8 +24,16 @@ public:
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT; }
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    virtual bool canBlockStay(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
 
 protected:
+    virtual bool canPlaceBlockOn(const Block* ground) const;
+    virtual void checkAndDropBlock(World* worldIn, const BlockPos& pos, const IBlockState* state);
+
     void construct() override
     {
         Block::construct();

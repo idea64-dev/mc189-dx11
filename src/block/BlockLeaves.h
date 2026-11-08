@@ -1,7 +1,6 @@
 #pragma once
 
 // Original: net/minecraft/block/BlockLeavesBase.java, BlockLeaves.java, BlockOldLeaf.java and BlockNewLeaf.java
-// Decay comes with world ticks (stage 9); fancy graphics switching with the world renderer (stage 7).
 
 #include "block/BlockPlanks.h"
 #include "util/Random.h"
@@ -18,6 +17,7 @@ public:
     }
 
     bool isOpaqueCube() const override { return false; }
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override;
 
 protected:
     void construct() override
@@ -51,8 +51,22 @@ public:
     bool isVisuallyOpaque() const override { return false; }
     virtual BlockPlanks::EnumType getWoodType(int meta) const = 0;
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Item::getItemFromBlock(Blocks::sapling); }
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
+    void setGraphicsLevel(bool fancy)
+    {
+        isTransparent = fancy;
+        fancyGraphics = fancy;
+        iconIndex = fancy ? 0 : 1;
+    }
 
 protected:
+    virtual void dropApple(World*, const BlockPos&, const IBlockState*, int) { }
+    virtual int getSaplingDropChance(const IBlockState*) const { return 20; }
+
     void construct() override
     {
         BlockLeavesBase::construct();
@@ -65,6 +79,11 @@ protected:
 
     int iconIndex = 0;
     bool isTransparent = false;
+
+private:
+    void destroy(World* worldIn, const BlockPos& pos);
+
+    std::vector<int> surroundings;
 };
 
 class BlockOldLeaf : public BlockLeaves {
@@ -99,8 +118,12 @@ public:
     int damageDropped(const IBlockState* state) const override { return BlockPlanks::getMetadata(state->getValue(VARIANT)); }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1, 2, 3 }); }
     ItemStack createStackedBlock(const IBlockState* state) const override { return ItemStack(Item::getItemFromBlock(this), 1, BlockPlanks::getMetadata(state->getValue(VARIANT))); }
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    // Java: harvestBlock drops the leaves themselves for shears -- the player comes with stage 8.
 
 protected:
+    void dropApple(World* worldIn, const BlockPos& pos, const IBlockState* state, int chance) override;
+    int getSaplingDropChance(const IBlockState* state) const override { return state->getValue(VARIANT) == BlockPlanks::EnumType::JUNGLE ? 40 : 20; }
     void construct() override
     {
         BlockLeaves::construct();
@@ -133,8 +156,11 @@ public:
     BlockPlanks::EnumType getWoodType(int meta) const override { return BlockPlanks::byMetadata((meta & 3) + 4); }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1 }); }
     ItemStack createStackedBlock(const IBlockState* state) const override { return ItemStack(Item::getItemFromBlock(this), 1, BlockPlanks::getMetadata(state->getValue(VARIANT)) - 4); }
+    int getDamageValue(World* worldIn, const BlockPos& pos) override;
+    // Java: harvestBlock drops the leaves themselves for shears -- the player comes with stage 8.
 
 protected:
+    void dropApple(World* worldIn, const BlockPos& pos, const IBlockState* state, int chance) override;
     void construct() override
     {
         BlockLeaves::construct();

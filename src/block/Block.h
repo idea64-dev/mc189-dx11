@@ -13,11 +13,13 @@
 
 #include "block/material/Material.h"
 #include "block/state/BlockState.h"
+#include "util/BlockPos.h"
 #include "util/Registry.h"
 #include "util/ResourceLocation.h"
 
 #include <initializer_list>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,9 +30,19 @@
 namespace mc {
 
 class CreativeTabs;
+class Entity;
+class EntityLivingBase;
+class EntityPlayer;
+class Explosion;
+class IBlockAccess;
 class Item;
 class ItemStack;
 class Random;
+class TileEntity;
+class World;
+struct AxisAlignedBB;
+struct MovingObjectPosition;
+struct Vec3;
 
 enum class EnumWorldBlockLayer { SOLID, CUTOUT_MIPPED, CUTOUT, TRANSLUCENT };
 
@@ -119,7 +131,71 @@ public:
     virtual const IBlockState* getStateFromMeta(int meta) const;
     // Throws std::invalid_argument for blocks with properties that don't override it.
     virtual int getMetaFromState(const IBlockState* state) const;
-    // Java: getActualState(state, world, pos) -- needs a world (stage 5).
+
+    // --- world callbacks (Java signatures; the IBlockAccess or World comes first as a pointer) ---
+    virtual const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos);
+    virtual bool isPassable(IBlockAccess* worldIn, const BlockPos& pos);
+    virtual bool isReplaceable(World* worldIn, const BlockPos& pos);
+    virtual float getBlockHardness(World* worldIn, const BlockPos& pos);
+    virtual int getMixedBrightnessForBlock(IBlockAccess* worldIn, const BlockPos& pos);
+    virtual bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side);
+    virtual bool isBlockSolid(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side);
+    virtual AxisAlignedBB getSelectedBoundingBox(World* worldIn, const BlockPos& pos);
+    virtual void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity);
+    // Java returns null for blocks without collision.
+    virtual std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    virtual void randomTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& random);
+    virtual void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand);
+    virtual void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand);
+    virtual void onBlockDestroyedByPlayer(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    virtual void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock);
+    virtual int tickRate(World* worldIn);
+    virtual void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    virtual void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    virtual float getPlayerRelativeBlockHardness(EntityPlayer* playerIn, World* worldIn, const BlockPos& pos);
+    void dropBlockAsItem(World* worldIn, const BlockPos& pos, const IBlockState* state, int fortune)
+    {
+        dropBlockAsItemWithChance(worldIn, pos, state, 1.0f, fortune);
+    }
+    virtual void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune);
+    static void spawnAsEntity(World* worldIn, const BlockPos& pos, ItemStack stack);
+    // Java: getExplosionResistance(Entity exploder); no block looks at the exploder.
+    virtual float getExplosionResistance() const { return blockResistance / 5.0f; }
+    float getExplosionResistance(Entity*) const { return getExplosionResistance(); }
+    virtual std::optional<MovingObjectPosition> collisionRayTrace(World* worldIn, const BlockPos& pos, const Vec3& start, const Vec3& end);
+    virtual void onBlockDestroyedByExplosion(World*, const BlockPos&, Explosion*) { }
+    virtual bool canReplace(World* worldIn, const BlockPos& pos, EnumFacing side, const ItemStack* stack);
+    virtual bool canPlaceBlockOnSide(World* worldIn, const BlockPos& pos, EnumFacing side);
+    virtual bool canPlaceBlockAt(World* worldIn, const BlockPos& pos);
+    virtual bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ);
+    virtual void onEntityCollidedWithBlock(World*, const BlockPos&, Entity*) { }
+    virtual const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer);
+    virtual void onBlockClicked(World*, const BlockPos&, EntityPlayer*) { }
+    virtual Vec3 modifyAcceleration(World* worldIn, const BlockPos& pos, Entity* entityIn, const Vec3& motion);
+    virtual void setBlockBoundsBasedOnState(IBlockAccess*, const BlockPos&) { }
+    virtual int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass);
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos) { return colorMultiplier(worldIn, pos, 0); }
+    virtual int getWeakPower(IBlockAccess*, const BlockPos&, const IBlockState*, EnumFacing) { return 0; }
+    virtual void onEntityCollidedWithBlock(World*, const BlockPos&, const IBlockState*, Entity*) { }
+    virtual int getStrongPower(IBlockAccess*, const BlockPos&, const IBlockState*, EnumFacing) { return 0; }
+    virtual void harvestBlock(World* worldIn, EntityPlayer* player, const BlockPos& pos, const IBlockState* state, TileEntity* te);
+    virtual void onBlockPlacedBy(World*, const BlockPos&, const IBlockState*, EntityLivingBase*, const ItemStack&) { }
+    virtual bool onBlockEventReceived(World*, const BlockPos&, const IBlockState*, int, int) { return false; }
+    virtual void onFallenUpon(World* worldIn, const BlockPos& pos, Entity* entityIn, float fallDistance);
+    virtual void onLanded(World* worldIn, Entity* entityIn);
+    virtual Item* getItem(World* worldIn, const BlockPos& pos);
+    virtual int getDamageValue(World* worldIn, const BlockPos& pos);
+    virtual void onBlockHarvested(World*, const BlockPos&, const IBlockState*, EntityPlayer*) { }
+    virtual void fillWithRain(World*, const BlockPos&) { }
+    virtual bool canDropFromExplosion(Explosion*) { return true; }
+    virtual int getComparatorInputOverride(World*, const BlockPos&) { return 0; }
+    // Java: ITileEntityProvider.createNewTileEntity -- null for blocks without a tile entity.
+    virtual std::shared_ptr<TileEntity> createNewTileEntity(World*, int) { return nullptr; }
+    // Java: Block.getBlockFromItem -- the block of an ItemBlock, null otherwise.
+    static Block* getBlockFromItem(const Item* item);
 
     Block* setStepSound(const SoundType& sound);
     Block* setLightOpacity(int opacity);
@@ -148,7 +224,6 @@ public:
     virtual int quantityDropped(Random& random) const;
     virtual Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const;
     virtual int damageDropped(const IBlockState* state) const;
-    virtual float getExplosionResistance() const { return blockResistance / 5.0f; }
     virtual EnumWorldBlockLayer getBlockLayer() const { return EnumWorldBlockLayer::SOLID; }
     double getBlockBoundsMinX() const { return minX; }
     double getBlockBoundsMaxX() const { return maxX; }

@@ -11,6 +11,8 @@
 
 namespace mc {
 
+class Entity;
+
 class EntityList {
 public:
     struct EntityEggInfo {
@@ -26,6 +28,12 @@ public:
     // Java: a LinkedHashMap by id, iterated in registration order.
     static const std::vector<EntityEggInfo>& entityEggs();
     static const EntityEggInfo* getEggInfo(int id);
+    // Java: getEntityString -- the registered name of the entity's class (EntityPig -> "Pig"), nullopt for
+    // unregistered classes such as the players.
+    static std::optional<std::string> getEntityString(std::string_view javaClassName);
+    static std::optional<std::string> getEntityString(const Entity* entity);
+    // Java: classToIDMapping by the entity's class, 0 when unregistered.
+    static int getEntityID(const Entity* entity);
 };
 
 } // namespace mc

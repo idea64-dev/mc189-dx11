@@ -1,13 +1,16 @@
 #pragma once
 
 // Original: net/minecraft/block/BlockPistonBase.java, BlockPistonExtension.java and BlockPistonMoving.java
-// Pushing comes with the world (stage 9).
 
 #include "block/BlockContainer.h"
 
 #include <optional>
+#include <stdexcept>
+#include <vector>
 
 namespace mc {
+
+class TileEntityPiston;
 
 class BlockPistonBase : public Block {
 public:
@@ -30,8 +33,20 @@ public:
     }
 
     bool isOpaqueCube() const override { return false; }
+    void onBlockPlacedBy(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityLivingBase* placer, const ItemStack& stack) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    bool onBlockEventReceived(World* worldIn, const BlockPos& pos, const IBlockState* state, int eventID, int eventParam) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
     void setBlockBoundsForItemRender() override { setBlockBounds(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f); }
+    void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
     bool isFullCube() const override { return false; }
+    static EnumFacing getFacingFromEntity(World* worldIn, const BlockPos& clickedBlock, EntityLivingBase* entityIn);
+    static bool canPush(Block* blockIn, World* worldIn, const BlockPos& pos, EnumFacing direction, bool allowDestroy);
     const IBlockState* getStateForEntityRender(const IBlockState*) const override { return getDefaultState()->withProperty(FACING, EnumFacing::UP); }
     const IBlockState* getStateFromMeta(int meta) const override
     {
@@ -67,6 +82,10 @@ protected:
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING, &EXTENDED }); }
 
 private:
+    void checkForMove(World* worldIn, const BlockPos& pos, const IBlockState* state);
+    bool shouldBeExtended(World* worldIn, const BlockPos& pos, EnumFacing facing);
+    bool doMove(World* worldIn, const BlockPos& pos, EnumFacing direction, bool extending);
+
     bool isSticky = false;
     bool isStickyArg;
 };
@@ -87,9 +106,20 @@ public:
 
     static std::optional<EnumFacing> getFacing(int meta) { return BlockPistonBase::getFacing(meta); }
 
+    // Java: onBlockHarvested removes the piston behind the head for creative players -- the player comes with stage 8.
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool canPlaceBlockAt(World*, const BlockPos&) override { return false; }
+    bool canPlaceBlockOnSide(World*, const BlockPos&, EnumFacing) override { return false; }
     int quantityDropped(Random&) const override { return 0; }
+    void addCollisionBoxesToList(World* worldIn, const BlockPos& pos, const IBlockState* state, const AxisAlignedBB& mask,
+        std::vector<AxisAlignedBB>& list, Entity* collidingEntity) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void applyHeadBounds(const IBlockState* state);
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    bool shouldSideBeRendered(IBlockAccess*, const BlockPos&, EnumFacing) override { return true; }
+    Item* getItem(World* worldIn, const BlockPos& pos) override;
     const IBlockState* getStateFromMeta(int meta) const override
     {
         const auto facing = getFacing(meta);
@@ -115,6 +145,9 @@ protected:
         setHardness(0.5f);
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING, &TYPE, &SHORT }); }
+
+private:
+    void applyCoreBounds(const IBlockState* state);
 };
 
 class BlockPistonMoving : public BlockContainer {
@@ -129,8 +162,23 @@ public:
     {
     }
 
+    std::shared_ptr<TileEntity> createNewTileEntity(World*, int) override { return nullptr; }
+    static std::shared_ptr<TileEntity> newTileEntity(const IBlockState* state, EnumFacing facing, bool extending, bool renderHead);
+    void breakBlock(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    bool canPlaceBlockAt(World*, const BlockPos&) override { return false; }
+    bool canPlaceBlockOnSide(World*, const BlockPos&, EnumFacing) override { return false; }
+    void onBlockDestroyedByPlayer(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
     bool isOpaqueCube() const override { return false; }
     bool isFullCube() const override { return false; }
+    bool onBlockActivated(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityPlayer* playerIn, EnumFacing side, float hitX,
+        float hitY, float hitZ) override;
+    void dropBlockAsItemWithChance(World* worldIn, const BlockPos& pos, const IBlockState* state, float chance, int fortune) override;
+    std::optional<MovingObjectPosition> collisionRayTrace(World*, const BlockPos&, const Vec3&, const Vec3&) override { return std::nullopt; }
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* extendingBlock, float progress, EnumFacing direction);
+    Item* getItem(World*, const BlockPos&) override { return nullptr; }
     const IBlockState* getStateFromMeta(int meta) const override
     {
         const auto facing = BlockPistonExtension::getFacing(meta);
@@ -156,6 +204,9 @@ protected:
         setHardness(-1.0f);
     }
     std::unique_ptr<BlockState> createBlockState() override { return makeBlockState({ &FACING, &TYPE }); }
+
+private:
+    static TileEntityPiston* getTileEntity(IBlockAccess* worldIn, const BlockPos& pos);
 };
 
 MC_ENUM_TRAITS(BlockPistonExtension::EnumPistonType, 2, value == BlockPistonExtension::EnumPistonType::DEFAULT ? "normal" : "sticky")

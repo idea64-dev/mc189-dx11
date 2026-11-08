@@ -24,6 +24,13 @@ public:
     EnumWorldBlockLayer getBlockLayer() const override { return EnumWorldBlockLayer::CUTOUT_MIPPED; }
     int getMetaFromState(const IBlockState*) const override { return 0; }
     Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const override;
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    int colorMultiplier(IBlockAccess* worldIn, const BlockPos& pos, int renderPass) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    // Java: IGrowable
+    bool canGrow(World*, const BlockPos&, const IBlockState*, bool) { return true; }
+    bool canUseBonemeal(World*, Random&, const BlockPos&, const IBlockState*) { return true; }
+    void grow(World* worldIn, Random& rand, const BlockPos& pos, const IBlockState* state);
 
 protected:
     void construct() override
@@ -49,6 +56,9 @@ public:
 
     int getMetaFromState(const IBlockState*) const override { return 0; }
     Item* getItemDropped(const IBlockState* state, Random& rand, int fortune) const override;
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
 
 protected:
     void construct() override
@@ -99,6 +109,8 @@ public:
         return info(type).metadata;
     }
     void getSubBlocks(Item*, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(Item::getItemFromBlock(this), list, { 0, 1, 2 }); }
+    const IBlockState* getActualState(const IBlockState* state, IBlockAccess* worldIn, const BlockPos& pos) override;
+    int getDamageValue(World* worldIn, const BlockPos& pos) override;
 
 protected:
     void construct() override

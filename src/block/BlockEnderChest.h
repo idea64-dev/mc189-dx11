@@ -22,6 +22,13 @@ public:
     int getRenderType() const override { return 2; }
     int quantityDropped(Random&) const override { return 8; }
     bool canSilkHarvest() const override { return true; }
+    const IBlockState* onBlockPlaced(World* worldIn, const BlockPos& pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta,
+        EntityLivingBase* placer) override;
+    void onBlockPlacedBy(World* worldIn, const BlockPos& pos, const IBlockState* state, EntityLivingBase* placer, const ItemStack& stack) override;
+    // Java: onBlockActivated opens the player's ender inventory -- stage 8.
+    std::shared_ptr<TileEntity> createNewTileEntity(World* worldIn, int meta) override;
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+
     const IBlockState* getStateFromMeta(int meta) const override
     {
         EnumFacing enumfacing = getFront(meta);

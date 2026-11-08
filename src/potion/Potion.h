@@ -2,8 +2,8 @@
 
 // Original: net/minecraft/potion/Potion.java with PotionHealth, PotionAttackDamage, PotionHealthBoost and
 // PotionAbsorption, and net/minecraft/potion/PotionEffect.java.
-// Ported so far: the potion table and effect data. performEffect/affectEntity, isReady and the attribute
-// modifiers act on living entities and come with potion effects (stage 12).
+// The effects on living entities (performEffect, isReady, the attribute modifiers) are in PotionEntityEffects.cpp;
+// affectEntity (splash potions) comes with the thrown potions (stage 10).
 
 #include "util/ResourceLocation.h"
 
@@ -13,6 +13,9 @@
 
 namespace mc {
 
+class AttributeModifier;
+class BaseAttributeMap;
+class EntityLivingBase;
 class NBTTagCompound;
 
 class Potion {
@@ -38,6 +41,14 @@ public:
     bool isUsable() const { return usable; }
     int getLiquidColor() const { return liquidColor; }
     bool isInstant() const { return kind == Kind::HEALTH; }
+    void performEffect(EntityLivingBase* entityLivingBaseIn, int amplifier) const;
+    bool isReady(int duration, int amplifier) const;
+    // Java: getAttributeModifierMap -- the one attribute modifier the potion registers, if any: the attribute name
+    // and the base modifier.
+    const AttributeModifier* getAttributeModifier(std::string* attributeName = nullptr) const;
+    void removeAttributesModifiersFromEntity(EntityLivingBase* entityLivingBaseIn, BaseAttributeMap& attributeMap, int amplifier) const;
+    void applyAttributesModifiersToEntity(EntityLivingBase* entityLivingBaseIn, BaseAttributeMap& attributeMap, int amplifier) const;
+    double getAttributeModifierAmount(int amplifier, const AttributeModifier& modifier) const;
 
 private:
     struct Init;
@@ -74,7 +85,9 @@ public:
     void setSplashPotion(bool splashPotion) { isSplashPotion = splashPotion; }
     bool getIsAmbient() const { return isAmbient; }
     bool getIsShowParticles() const { return showParticles; }
-    // Java: onUpdate(EntityLivingBase) and performEffect -- stage 12.
+    // Ticks the effect on the entity; false once it ran out.
+    bool onUpdate(EntityLivingBase* entityIn);
+    void performEffect(EntityLivingBase* entityIn);
     std::string getEffectName() const { return Potion::potionTypes[static_cast<size_t>(potionID)]->getName(); }
     int hashCode() const { return potionID; }
     std::string toString() const;

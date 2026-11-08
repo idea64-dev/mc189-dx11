@@ -2,16 +2,17 @@
 
 // Original: net/minecraft/world/storage/ISaveHandler.java, net/minecraft/world/chunk/storage/IChunkLoader.java and
 // net/minecraft/world/MinecraftException.java.
-// getPlayerNBTManager (player data) comes with the player (stage 8).
 
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace mc {
 
 class Chunk;
+class EntityPlayer;
 class NBTTagCompound;
 class World;
 class WorldInfo;
@@ -34,6 +35,16 @@ public:
     virtual void saveExtraData() = 0;
 };
 
+// Original: net/minecraft/world/storage/IPlayerFileData.java
+class IPlayerFileData {
+public:
+    virtual ~IPlayerFileData() = default;
+    virtual void writePlayerData(EntityPlayer* player) = 0;
+    // Reads playerdata/<uuid>.dat into the player; null when there is none.
+    virtual std::shared_ptr<NBTTagCompound> readPlayerData(EntityPlayer* player) = 0;
+    virtual std::vector<std::string> getAvailablePlayerDat() = 0;
+};
+
 class ISaveHandler {
 public:
     virtual ~ISaveHandler() = default;
@@ -48,6 +59,7 @@ public:
     virtual std::filesystem::path getWorldDirectory() const = 0;
     virtual std::filesystem::path getMapFileFromName(const std::string& mapName) const = 0;
     virtual std::string getWorldDirectoryName() const = 0;
+    virtual IPlayerFileData* getPlayerNBTManager() = 0;
 };
 
 } // namespace mc

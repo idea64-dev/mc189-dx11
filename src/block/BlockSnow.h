@@ -8,6 +8,7 @@ namespace mc {
 
 class BlockSnow : public Block {
 public:
+    bool canPlaceBlockAt(World* worldIn, const BlockPos& pos) override;
     MC_BLOCK_CLASS(BlockSnow)
 
     static const PropertyInteger LAYERS;
@@ -24,6 +25,20 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(LAYERS, (meta & 7) + 1); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(LAYERS) - 1; }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::snowball; }
+    bool isPassable(IBlockAccess* worldIn, const BlockPos& pos) override;
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    void setBlockBoundsBasedOnState(IBlockAccess* worldIn, const BlockPos& pos) override;
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override;
+    void harvestBlock(World* worldIn, EntityPlayer* player, const BlockPos& pos, const IBlockState* state, TileEntity* te) override;
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+    bool shouldSideBeRendered(IBlockAccess* worldIn, const BlockPos& pos, EnumFacing side) override
+    {
+        return side == EnumFacing::UP ? true : Block::shouldSideBeRendered(worldIn, pos, side);
+    }
+    bool isReplaceable(World* worldIn, const BlockPos& pos) override;
+
+private:
+    bool checkAndDropBlock(World* worldIn, const BlockPos& pos, const IBlockState* state);
 
 protected:
     void construct() override
@@ -51,6 +66,7 @@ public:
 
     int quantityDropped(Random&) const override { return 4; }
     Item* getItemDropped(const IBlockState*, Random&, int) const override { return Items::snowball; }
+    void updateTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
 
 protected:
     void construct() override
@@ -69,6 +85,10 @@ public:
         : Block(Material::sand, MapColor::brownColor)
     {
     }
+
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World* worldIn, const BlockPos& pos, const IBlockState* state) override;
+    using Block::onEntityCollidedWithBlock;
+    void onEntityCollidedWithBlock(World* worldIn, const BlockPos& pos, const IBlockState* state, Entity* entityIn) override;
 
 protected:
     void construct() override
@@ -93,6 +113,19 @@ public:
     const IBlockState* getStateFromMeta(int meta) const override { return getDefaultState()->withProperty(WET, (meta & 1) == 1); }
     int getMetaFromState(const IBlockState* state) const override { return state->getValue(WET) ? 1 : 0; }
     void getSubBlocks(Item* item, const CreativeTabs*, std::vector<ItemStack>& list) const override { addSubBlocks(item, list, { 0, 1 }); }
+    void onBlockAdded(World* worldIn, const BlockPos& pos, const IBlockState* state) override { tryAbsorb(worldIn, pos, state); }
+    void onNeighborBlockChange(World* worldIn, const BlockPos& pos, const IBlockState* state, Block* neighborBlock) override
+    {
+        tryAbsorb(worldIn, pos, state);
+        Block::onNeighborBlockChange(worldIn, pos, state, neighborBlock);
+    }
+    void randomDisplayTick(World* worldIn, const BlockPos& pos, const IBlockState* state, Random& rand) override;
+
+protected:
+    void tryAbsorb(World* worldIn, const BlockPos& pos, const IBlockState* state);
+
+private:
+    bool absorb(World* worldIn, const BlockPos& pos);
 
 protected:
     void construct() override

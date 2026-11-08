@@ -18,7 +18,9 @@ public:
     int getRenderType() const override { return -1; }
     bool isOpaqueCube() const override { return false; }
     bool canCollideCheck(const IBlockState*, bool) const override { return false; }
-    // Java: getCollisionBoundingBox returns null, isReplaceable true, no drops (stage 9).
+    std::optional<AxisAlignedBB> getCollisionBoundingBox(World*, const BlockPos&, const IBlockState*) override { return std::nullopt; }
+    bool isReplaceable(World*, const BlockPos&) override { return true; }
+    void dropBlockAsItemWithChance(World*, const BlockPos&, const IBlockState*, float, int) override { }
 };
 
 } // namespace mc

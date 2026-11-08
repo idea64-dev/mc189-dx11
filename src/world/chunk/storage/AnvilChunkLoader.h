@@ -2,7 +2,7 @@
 
 // Original: net/minecraft/world/chunk/storage/AnvilChunkLoader.java -- chunks in region files as NBT. Saving
 // queues the NBT; the File IO thread writes it.
-// Entities, tile entities and scheduled ticks are kept as NBT on the chunk until stages 9 and 10 (see Chunk.h).
+// Entities are kept as NBT on the chunk until stage 10 (see Chunk.h); scheduled ticks go to a WorldServer.
 
 #include "world/ChunkCoordIntPair.h"
 #include "world/storage/ISaveHandler.h"

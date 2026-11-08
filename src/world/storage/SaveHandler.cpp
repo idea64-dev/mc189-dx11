@@ -1,5 +1,8 @@
 #include "world/storage/SaveHandler.h"
 
+#include "entity/player/EntityPlayer.h"
+#include "nbt/NBTTagCompound.h"
+
 #include "core/DataStream.h"
 #include "core/JavaTime.h"
 #include "core/Log.h"
@@ -138,6 +141,52 @@ void AnvilSaveHandler::flush()
 {
     ThreadedFileIOBase::getThreadedIOInstance().waitForFinish();
     RegionFileCache::clearRegionFileReferences();
+}
+
+void SaveHandler::writePlayerData(EntityPlayer* player)
+{
+    try {
+        NBTTagCompound nbttagcompound;
+        player->writeToNBT(nbttagcompound);
+        const std::string id = player->getUniqueID().toString();
+        const std::filesystem::path file1 = playersDirectory / (id + ".dat.tmp");
+        const std::filesystem::path file2 = playersDirectory / (id + ".dat");
+        CompressedStreamTools::writeCompressed(nbttagcompound, file1);
+        std::error_code ec;
+        if (std::filesystem::exists(file2, ec))
+            std::filesystem::remove(file2, ec);
+        std::filesystem::rename(file1, file2, ec);
+    } catch (const std::exception&) {
+        Log::warn("Failed to save player data for {}", player->getName());
+    }
+}
+
+std::shared_ptr<NBTTagCompound> SaveHandler::readPlayerData(EntityPlayer* player)
+{
+    std::shared_ptr<NBTTagCompound> nbttagcompound;
+    try {
+        const std::filesystem::path file1 = playersDirectory / (player->getUniqueID().toString() + ".dat");
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(file1, ec))
+            nbttagcompound = CompressedStreamTools::readCompressed(file1);
+    } catch (const std::exception&) {
+        Log::warn("Failed to load player data for {}", player->getName());
+    }
+    if (nbttagcompound)
+        player->readFromNBT(*nbttagcompound);
+    return nbttagcompound;
+}
+
+std::vector<std::string> SaveHandler::getAvailablePlayerDat()
+{
+    std::vector<std::string> names;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(playersDirectory, ec)) {
+        const std::string name = toUtf8(entry.path().filename().wstring());
+        if (name.size() > 4 && name.ends_with(".dat"))
+            names.push_back(name.substr(0, name.size() - 4));
+    }
+    return names;
 }
 
 } // namespace mc
